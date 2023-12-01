@@ -61,81 +61,6 @@ FUNCTION getWordValue RETURNS INTEGER
 
 /* ***************************  Main Block  *************************** */
 
-/* ************************  Function Implementations ***************** */
-
-
-FUNCTION getValue RETURNS INTEGER 
-( INPUT ipcString AS CHARACTER ):
-/*------------------------------------------------------------------------------
- Purpose: Extract first and last number from string
- Notes:
-------------------------------------------------------------------------------*/   
-DEFINE VARIABLE iChar AS INTEGER NO-UNDO.
-DEFINE VARIABLE cChar AS CHARACTER NO-UNDO.
-
-DEFINE VARIABLE iFirst AS INTEGER NO-UNDO INIT ?.
-DEFINE VARIABLE iLast  AS INTEGER NO-UNDO INIT ?.
-
-   DO iChar = 1 TO LENGTH (ipcString):
-      cChar = SUBSTRING (ipcString, iChar, 1).
-      IF INDEX ("0123456789", cChar) NE 0 THEN DO:
-         /* Found a number */
-         IF iFirst EQ ? THEN 
-            iFirst  = INTEGER (cChar).
-         iLast = INTEGER (cChar).
-      END.
-   END.
-   
-   RETURN iFirst * 10 + iLast.
-   
-END FUNCTION.
-
-FUNCTION getWordValue RETURNS INTEGER 
-( INPUT ipcString AS CHARACTER   ):
-/*------------------------------------------------------------------------------
- Purpose: Get first and last value from string, but the numbers can be words
- Notes:
-------------------------------------------------------------------------------*/   
-DEFINE VARIABLE cWordList  AS CHARACTER NO-UNDO.
-DEFINE VARIABLE iWord      AS INTEGER NO-UNDO.
-DEFINE VARIABLE cWord      AS CHARACTER NO-UNDO.
-DEFINE VARIABLE iChar      AS INTEGER NO-UNDO.
-DEFINE VARIABLE cChar      AS CHARACTER NO-UNDO.
-DEFINE VARIABLE cNewString AS CHARACTER NO-UNDO.
-DEFINE VARIABLE lFoundWord AS LOGICAL NO-UNDO.
-
-   ASSIGN 
-      cWordList = "one,two,three,four,five,six,seven,eight,nine"
-   .
-   
-   IF lvlDebug THEN
-      MESSAGE ipcString
-      VIEW-AS ALERT-BOX.
-   
-   iChar = 1.
-   DO iChar = 1 TO LENGTH (ipcString):
-      lFoundWord = FALSE.
-      cChar = SUBSTRING (ipcString, iChar, 1).
-      DO iWord = 1 TO NUM-ENTRIES (cWordList):
-         cWord = ENTRY (iWord, cWordList).
-         IF SUBSTRING (ipcString, iChar) BEGINS cWord THEN DO:
-            /* Found a number as a word, replace */
-            lFoundWord = TRUE.
-            cNewString = cNewString + STRING (iWord).
-         END.
-      END.
-      IF lFoundWord EQ FALSE THEN DO:
-         cNewString = cNewString + cChar.
-      END.
-   END.
-
-   IF lvlDebug THEN    
-      MESSAGE cNewString
-      VIEW-AS ALERT-BOX.
-   
-   RETURN getValue(cNewString).
-
-END FUNCTION.
 
 DISPLAY
    SUBSTITUTE ("Year &1 Day &2", iYear, iDay) FORMAT "X(16)" NO-LABELS SKIP
@@ -281,3 +206,79 @@ CATCH oError AS Progress.Lang.Error :
    END.
    RETURN.      
 END CATCH.
+
+/* ************************  Function Implementations ***************** */
+
+
+FUNCTION getValue RETURNS INTEGER 
+( INPUT ipcString AS CHARACTER ):
+/*------------------------------------------------------------------------------
+ Purpose: Extract first and last number from string
+ Notes:
+------------------------------------------------------------------------------*/   
+DEFINE VARIABLE iChar AS INTEGER NO-UNDO.
+DEFINE VARIABLE cChar AS CHARACTER NO-UNDO.
+
+DEFINE VARIABLE iFirst AS INTEGER NO-UNDO INIT ?.
+DEFINE VARIABLE iLast  AS INTEGER NO-UNDO INIT ?.
+
+   DO iChar = 1 TO LENGTH (ipcString):
+      cChar = SUBSTRING (ipcString, iChar, 1).
+      IF INDEX ("0123456789", cChar) NE 0 THEN DO:
+         /* Found a number */
+         IF iFirst EQ ? THEN 
+            iFirst  = INTEGER (cChar).
+         iLast = INTEGER (cChar).
+      END.
+   END.
+   
+   RETURN iFirst * 10 + iLast.
+   
+END FUNCTION.
+
+FUNCTION getWordValue RETURNS INTEGER 
+( INPUT ipcString AS CHARACTER   ):
+/*------------------------------------------------------------------------------
+ Purpose: Get first and last value from string, but the numbers can be words
+ Notes:
+------------------------------------------------------------------------------*/   
+DEFINE VARIABLE cWordList  AS CHARACTER NO-UNDO.
+DEFINE VARIABLE iWord      AS INTEGER NO-UNDO.
+DEFINE VARIABLE cWord      AS CHARACTER NO-UNDO.
+DEFINE VARIABLE iChar      AS INTEGER NO-UNDO.
+DEFINE VARIABLE cChar      AS CHARACTER NO-UNDO.
+DEFINE VARIABLE cNewString AS CHARACTER NO-UNDO.
+DEFINE VARIABLE lFoundWord AS LOGICAL NO-UNDO.
+
+   ASSIGN 
+      cWordList = "one,two,three,four,five,six,seven,eight,nine"
+   .
+   
+   IF lvlDebug THEN
+      MESSAGE ipcString
+      VIEW-AS ALERT-BOX.
+   
+   iChar = 1.
+   DO iChar = 1 TO LENGTH (ipcString):
+      lFoundWord = FALSE.
+      cChar = SUBSTRING (ipcString, iChar, 1).
+      DO iWord = 1 TO NUM-ENTRIES (cWordList):
+         cWord = ENTRY (iWord, cWordList).
+         IF SUBSTRING (ipcString, iChar) BEGINS cWord THEN DO:
+            /* Found a number as a word, replace */
+            lFoundWord = TRUE.
+            cNewString = cNewString + STRING (iWord).
+         END.
+      END.
+      IF lFoundWord EQ FALSE THEN DO:
+         cNewString = cNewString + cChar.
+      END.
+   END.
+
+   IF lvlDebug THEN    
+      MESSAGE cNewString
+      VIEW-AS ALERT-BOX.
+   
+   RETURN getValue(cNewString).
+
+END FUNCTION.
