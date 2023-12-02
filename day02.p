@@ -312,7 +312,3 @@ DEFINE VARIABLE cCubes    AS CHARACTER NO-UNDO.
    END.
    
 END PROCEDURE.
-
-
-/* ************************  Function Implementations ***************** */
-
