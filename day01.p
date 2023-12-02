@@ -51,6 +51,8 @@ INDEX indLine IS UNIQUE IDLine.
 
 /* ********************  Preprocessor Definitions  ******************** */
 
+{AOC_session.i}
+
 /* ************************  Function Prototypes ********************** */
 
 FUNCTION getValue RETURNS INTEGER 
