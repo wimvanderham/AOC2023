@@ -50,9 +50,6 @@ DEFINE TEMP-TABLE ttLine
    FIELD iMaxNrGreen AS INTEGER  
    FIELD iMaxNrBlue  AS INTEGER 
    FIELD lPossible   AS LOGICAL 
-   FIELD iMinNrRed   AS INTEGER 
-   FIELD iMinNrGreen AS INTEGER  
-   FIELD iMinNrBlue  AS INTEGER 
    FIELD iPower      AS INTEGER 
 INDEX indLine IS UNIQUE IDLine.
 
@@ -157,7 +154,6 @@ DO iLine = 1 TO NUM-ENTRIES (lcInput, "~n"):
        OUTPUT ttLine.iMaxNrRed,
        OUTPUT ttLine.iMaxNrGreen,
        OUTPUT ttLine.iMaxNrBlue).
-
       
 END. /* ReadBlock: */
 
@@ -183,7 +179,7 @@ IF lPart[1] THEN DO:
          ttLine.lPossible = FALSE.
          
       IF ttLine.lPossible THEN 
-         iSolution = iSolution + ttLine.IDLine.
+         iSolution = iSolution + ttLine.iGameID.
    END.
          
    IF lvlShow THEN DO:
@@ -202,6 +198,7 @@ IF lPart[1] THEN DO:
 END. /* Process Part One */
 
 IF lPart[2] THEN DO:
+   /* Process Part Two */
 
    iSolution = 0.
    FOR EACH ttLine:
