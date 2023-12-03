@@ -56,7 +56,6 @@ DEFINE TEMP-TABLE ttNumber
    FIELD iToY     AS INTEGER 
    FIELD iNumber  AS INTEGER 
    FIELD lPart    AS LOGICAL 
-   FIELD IDSymbol AS INTEGER // Adjecent symbol
 INDEX indID IS UNIQUE IDNumber
 INDEX indXY IS PRIMARY iFromX iFromY iToX iToY.
 
@@ -68,11 +67,6 @@ DEFINE TEMP-TABLE ttSymbol
    FIELD Numbers   AS INTEGER  
    FIELD GearRatio AS INTEGER INITIAL 1 
 INDEX indID IS UNIQUE IDSymbol.
-
-DEFINE TEMP-TABLE ttGear
-   FIELD IDSymbol AS INTEGER 
-   FIELD IDNumber AS INTEGER 
-INDEX indIDs IS UNIQUE IDSymbol IDNumber.
 
 DEFINE VARIABLE iX           AS INTEGER   NO-UNDO.
 DEFINE VARIABLE iY           AS INTEGER   NO-UNDO.
@@ -275,16 +269,8 @@ IF lPart[2] THEN DO:
       AND   ttSymbol.iY GE ttNumber.iFromY - 1
       AND   ttSymbol.iY LE ttNumber.iToY   + 1 NO-ERROR.
       IF AVAILABLE ttSymbol THEN DO:
-         ASSIGN
-            ttNumber.IDSymbol = ttSymbol.IDSymbol 
-         .
          IF ttSymbol.cSymbol EQ "*" THEN DO:
             /* Found a Gear */
-            CREATE ttGear.
-            ASSIGN 
-               ttGear.IDNumber = ttNumber.IDNumber
-               ttGear.IDSymbol = ttSymbol.IDSymbol
-            .
             ASSIGN 
                ttSymbol.Numbers   = ttSymbol.Numbers + 1
                ttSymbol.GearRatio = ttSymbol.GearRatio * ttNumber.iNumber
