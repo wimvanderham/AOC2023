@@ -30,6 +30,7 @@ DEFINE VARIABLE lcInput      AS LONGCHAR  NO-UNDO.
 DEFINE VARIABLE iLine        AS INTEGER   NO-UNDO.
 DEFINE VARIABLE cLine        AS CHARACTER NO-UNDO.
 DEFINE VARIABLE iChar        AS INTEGER   NO-UNDO.
+DEFINE VARIABLE cChar        AS CHARACTER NO-UNDO.
 DEFINE VARIABLE lOpenURL     AS LOGICAL   NO-UNDO INITIAL YES.
 DEFINE VARIABLE lPart        AS LOGICAL   NO-UNDO EXTENT 2.
 /* Variables for solving */
@@ -64,9 +65,12 @@ DEFINE TEMP-TABLE ttSymbol
    FIELD cSymbol  AS CHARACTER 
 INDEX indID IS UNIQUE IDSymbol.
 
-DEFINE VARIABLE iMaxRed   AS INTEGER NO-UNDO.
-DEFINE VARIABLE iMaxGreen AS INTEGER NO-UNDO.
-DEFINE VARIABLE iMaxBlue  AS INTEGER NO-UNDO.
+DEFINE VARIABLE iX           AS INTEGER   NO-UNDO.
+DEFINE VARIABLE iY           AS INTEGER   NO-UNDO.
+DEFINE VARIABLE lNumber      AS LOGICAL   NO-UNDO.
+DEFINE VARIABLE cNumber      AS CHARACTER NO-UNDO.
+DEFINE VARIABLE iNewIDNumber AS INTEGER   NO-UNDO.
+DEFINE VARIABLE iNewIDSymbol AS INTEGER   NO-UNDO.
 
 /* ********************  Preprocessor Definitions  ******************** */
 
@@ -142,7 +146,7 @@ ETIME (YES).
 COPY-LOB FROM FILE cInputfile TO OBJECT lcInput.
 
 IF lvlDebug THEN DO:
-
+   lcInput = "467..114..~n...*......~n..35..633.~n......#...~n617*......~n.....+.58.~n..592.....~n......755.~n...$.*....~n.664.598..".
 END.
 
 /* Read Input into Temp-table */
@@ -159,8 +163,63 @@ DO iLine = 1 TO NUM-ENTRIES (lcInput, "~n"):
       ttLine.cInputLine = cLine
    .
 
+   DO iChar = 1 TO LENGTH (ttLine.cInputLine):
+      cChar = SUBSTRING (ttLine.cInputLine, iChar, 1).
       
+      ASSIGN 
+         iX = iChar
+         iY = ttLine.IDLine
+      .
+      IF INDEX ("0123456789", cChar) NE 0 THEN DO:
+         /* Found a number */
+         IF lNumber = FALSE THEN DO:
+            /* Found a new number */
+            ASSIGN 
+               iNewIDNumber = iNewIDNumber + 1
+            .
+            CREATE ttNumber.
+            ASSIGN 
+               ttNumber.IDNumber = iNewIDNumber
+               ttNumber.iFromX   = iX
+               ttNumber.iFromY   = iY
+            .
+            lNumber = TRUE.
+         END.
+         
+         cNumber = cNumber + cChar.
+      END.
+      ELSE DO:
+         /* No Number */
+         IF lNumber EQ TRUE THEN DO:
+            ASSIGN 
+               ttNumber.iToX    = iX - 1
+               ttNumber.iToY    = iY
+               ttNumber.iNumber = INTEGER (cNumber)
+            .
+            lNumber = FALSE.
+            cNumber = "".
+         END.
+         IF cChar NE "." THEN DO:
+            /* Found a Symbol */
+            iNewIDSymbol = iNewIDSymbol + 1.
+            CREATE ttSymbol.
+            ASSIGN 
+               ttSymbol.IDSymbol = iNewIDSymbol
+               ttSymbol.iX       = iX
+               ttSymbol.iY       = iY
+               ttSymbol.cSymbol  = cChar
+            .
+         END.
+      END.
+   END.
 END. /* ReadBlock: */
+
+IF lvlShow THEN DO:
+   RUN sy\win\wbrowsett.w
+      (INPUT TEMP-TABLE ttNumber:HANDLE).
+   RUN sy\win\wbrowsett.w
+      (INPUT TEMP-TABLE ttSymbol:HANDLE).
+END.
 
 IF lPart[1] THEN DO:
    /* Process Part One */
