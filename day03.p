@@ -55,6 +55,7 @@ DEFINE TEMP-TABLE ttNumber
    FIELD iToX     AS INTEGER 
    FIELD iToY     AS INTEGER 
    FIELD iNumber  AS INTEGER 
+   FIELD lPart    AS LOGICAL 
 INDEX indID IS UNIQUE IDNumber
 INDEX indXY IS PRIMARY iFromX iFromY iToX iToY.
 
@@ -71,6 +72,7 @@ DEFINE VARIABLE lNumber      AS LOGICAL   NO-UNDO.
 DEFINE VARIABLE cNumber      AS CHARACTER NO-UNDO.
 DEFINE VARIABLE iNewIDNumber AS INTEGER   NO-UNDO.
 DEFINE VARIABLE iNewIDSymbol AS INTEGER   NO-UNDO.
+DEFINE VARIABLE lIsDigit     AS LOGICAL   NO-UNDO.
 
 /* ********************  Preprocessor Definitions  ******************** */
 
@@ -163,6 +165,8 @@ DO iLine = 1 TO NUM-ENTRIES (lcInput, "~n"):
       ttLine.cInputLine = cLine
    .
 
+   lNumber = FALSE.
+   
    DO iChar = 1 TO LENGTH (ttLine.cInputLine):
       cChar = SUBSTRING (ttLine.cInputLine, iChar, 1).
       
@@ -170,7 +174,8 @@ DO iLine = 1 TO NUM-ENTRIES (lcInput, "~n"):
          iX = iChar
          iY = ttLine.IDLine
       .
-      IF INDEX ("0123456789", cChar) NE 0 THEN DO:
+      lIsDigit = INDEX ("0123456789", cChar) GT 0.
+      IF lIsDigit THEN DO:
          /* Found a number */
          IF lNumber = FALSE THEN DO:
             /* Found a new number */
@@ -185,21 +190,29 @@ DO iLine = 1 TO NUM-ENTRIES (lcInput, "~n"):
             .
             lNumber = TRUE.
          END.
-         
+         /* Adjust To position */
+         ASSIGN 
+            ttNumber.iToX = iX
+            ttNumber.iToY = iY
+         .
          cNumber = cNumber + cChar.
       END.
-      ELSE DO:
-         /* No Number */
+      IF lIsDigit EQ FALSE
+      OR iChar EQ LENGTH (ttLine.cInputLine)
+      THEN DO: 
          IF lNumber EQ TRUE THEN DO:
             ASSIGN 
-               ttNumber.iToX    = iX - 1
+               ttNumber.iToX    = iX - 1 WHEN lIsDigit EQ FALSE 
+               ttNumber.iToX    = iX     WHEN lIsDigit EQ TRUE 
                ttNumber.iToY    = iY
                ttNumber.iNumber = INTEGER (cNumber)
+               ttNumber.lPart   = FALSE 
             .
             lNumber = FALSE.
             cNumber = "".
          END.
-         IF cChar NE "." THEN DO:
+         IF  lIsDigit EQ FALSE 
+         AND cChar NE "." THEN DO:
             /* Found a Symbol */
             iNewIDSymbol = iNewIDSymbol + 1.
             CREATE ttSymbol.
@@ -223,7 +236,21 @@ END.
 
 IF lPart[1] THEN DO:
    /* Process Part One */
-         
+   iSolution = 0.
+   
+   FOR EACH ttNumber:
+      FIND FIRST ttSymbol
+      WHERE ttSymbol.iX GE ttNumber.iFromX - 1
+      AND   ttSymbol.iX LE ttNumber.iToX   + 1
+      AND   ttSymbol.iY GE ttNumber.iFromY - 1
+      AND   ttSymbol.iY LE ttNumber.iToY   + 1 NO-ERROR.
+      IF AVAILABLE ttSymbol THEN DO:
+         ASSIGN 
+            ttNumber.lPart = TRUE 
+            iSolution = iSolution + ttNumber.iNumber
+         .
+      END.
+   END.
          
    OUTPUT TO "clipboard".
    PUT UNFORMATTED iSolution SKIP.
@@ -233,6 +260,12 @@ IF lPart[1] THEN DO:
          iSolution) SKIP (1)
       SUBSTITUTE ("Found solution in &1 msecs.", ETIME)
    VIEW-AS ALERT-BOX TITLE " 2023 - Day 03 - Part One".
+   
+   IF lvlShow THEN DO:
+      RUN sy\win\wbrowsett.w
+         (INPUT TEMP-TABLE ttNumber:HANDLE).
+   END.
+   
 END. /* Process Part One */
 
 IF lPart[2] THEN DO:
