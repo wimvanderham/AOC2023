@@ -56,15 +56,23 @@ DEFINE TEMP-TABLE ttNumber
    FIELD iToY     AS INTEGER 
    FIELD iNumber  AS INTEGER 
    FIELD lPart    AS LOGICAL 
+   FIELD IDSymbol AS INTEGER // Adjecent symbol
 INDEX indID IS UNIQUE IDNumber
 INDEX indXY IS PRIMARY iFromX iFromY iToX iToY.
 
 DEFINE TEMP-TABLE ttSymbol
-   FIELD IDSymbol AS INTEGER
-   FIELD iX       AS INTEGER 
-   FIELD iY       AS INTEGER  
-   FIELD cSymbol  AS CHARACTER 
+   FIELD IDSymbol  AS INTEGER
+   FIELD iX        AS INTEGER 
+   FIELD iY        AS INTEGER  
+   FIELD cSymbol   AS CHARACTER
+   FIELD Numbers   AS INTEGER  
+   FIELD GearRatio AS INTEGER INITIAL 1 
 INDEX indID IS UNIQUE IDSymbol.
+
+DEFINE TEMP-TABLE ttGear
+   FIELD IDSymbol AS INTEGER 
+   FIELD IDNumber AS INTEGER 
+INDEX indIDs IS UNIQUE IDSymbol IDNumber.
 
 DEFINE VARIABLE iX           AS INTEGER   NO-UNDO.
 DEFINE VARIABLE iY           AS INTEGER   NO-UNDO.
@@ -227,13 +235,6 @@ DO iLine = 1 TO NUM-ENTRIES (lcInput, "~n"):
    END.
 END. /* ReadBlock: */
 
-IF lvlShow THEN DO:
-   RUN sy\win\wbrowsett.w
-      (INPUT TEMP-TABLE ttNumber:HANDLE).
-   RUN sy\win\wbrowsett.w
-      (INPUT TEMP-TABLE ttSymbol:HANDLE).
-END.
-
 IF lPart[1] THEN DO:
    /* Process Part One */
    iSolution = 0.
@@ -261,18 +262,43 @@ IF lPart[1] THEN DO:
       SUBSTITUTE ("Found solution in &1 msecs.", ETIME)
    VIEW-AS ALERT-BOX TITLE " 2023 - Day 03 - Part One".
    
-   IF lvlShow THEN DO:
-      RUN sy\win\wbrowsett.w
-         (INPUT TEMP-TABLE ttNumber:HANDLE).
-   END.
-   
 END. /* Process Part One */
 
 IF lPart[2] THEN DO:
    /* Process Part Two */
-
    iSolution = 0.
-   
+
+   FOR EACH ttNumber:
+      FIND FIRST ttSymbol
+      WHERE ttSymbol.iX GE ttNumber.iFromX - 1
+      AND   ttSymbol.iX LE ttNumber.iToX   + 1
+      AND   ttSymbol.iY GE ttNumber.iFromY - 1
+      AND   ttSymbol.iY LE ttNumber.iToY   + 1 NO-ERROR.
+      IF AVAILABLE ttSymbol THEN DO:
+         ASSIGN
+            ttNumber.IDSymbol = ttSymbol.IDSymbol 
+         .
+         IF ttSymbol.cSymbol EQ "*" THEN DO:
+            /* Found a Gear */
+            CREATE ttGear.
+            ASSIGN 
+               ttGear.IDNumber = ttNumber.IDNumber
+               ttGear.IDSymbol = ttSymbol.IDSymbol
+            .
+            ASSIGN 
+               ttSymbol.Numbers   = ttSymbol.Numbers + 1
+               ttSymbol.GearRatio = ttSymbol.GearRatio * ttNumber.iNumber
+            .
+         END.
+      END.
+   END.
+
+   FOR EACH ttSymbol
+   WHERE ttSymbol.cSymbol EQ "*"
+   AND   ttSymbol.Numbers EQ 2:
+      iSolution = iSolution + ttSymbol.GearRatio.
+   END. 
+     
    OUTPUT TO "clipboard".
    PUT UNFORMATTED iSolution SKIP.
    OUTPUT CLOSE.
