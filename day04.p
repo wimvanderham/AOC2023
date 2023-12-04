@@ -281,23 +281,19 @@ IF lPart[2] THEN DO:
    iSolution = 0.
 
    FOR EACH ttGame:
-      DO iCard = 1 TO ttGame.NrCards:
-         IF iCard = 1 THEN DO:
-            /* Original Card */
-            FOR EACH ttMyNumber OF ttGame:
-               
-               IF CAN-FIND (ttWinNumber WHERE ttWinNumber.IDGame EQ ttMyNumber.IDGame AND ttWinNumber.Number EQ ttMyNumber.Number) THEN DO:
-                  /* Found a winning number */
-                  ttGame.WinningNumbers = ttGame.WinningNumbers + 1.
-               END.
-            END.
-         END.      
-         FOR EACH ttNextGame
-         WHERE ttNextGame.GameNr GT ttGame.GameNr
-         iNext = 1 TO ttGame.WinningNumbers:
-            ttNextGame.NrCards = ttNextGame.NrCards + 1.
+      /* Original Card */
+      FOR EACH ttMyNumber OF ttGame:
+         
+         IF CAN-FIND (ttWinNumber WHERE ttWinNumber.IDGame EQ ttMyNumber.IDGame AND ttWinNumber.Number EQ ttMyNumber.Number) THEN DO:
+            /* Found a winning number */
+            ttGame.WinningNumbers = ttGame.WinningNumbers + 1.
          END.
-      END.                
+      END.
+      FOR EACH ttNextGame
+      WHERE ttNextGame.GameNr GT ttGame.GameNr
+      iNext = 1 TO ttGame.WinningNumbers:
+         ttNextGame.NrCards = ttNextGame.NrCards + ttGame.NrCards.
+      END.
    END.
      
    IF lvlShow THEN DO:
