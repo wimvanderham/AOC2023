@@ -244,6 +244,18 @@ IF lPart[1] THEN DO:
    /* Process Part One */
    iSolution = 0.
 
+   FOR EACH ttGame:
+      FOR EACH ttMyNumber OF ttGame:
+         IF CAN-FIND (ttWinNumber WHERE ttWinNumber.IDGame EQ ttMyNumber.IDGame AND ttWinNumber.Number EQ ttMyNumber.Number) THEN DO:
+            /* Found a winning number */
+            IF ttGame.Score = 0 THEN 
+               ttGame.Score = 1.
+            ELSE 
+               ttGame.Score = ttGame.Score * 2.
+         END.
+      END.
+      iSolution = iSolution + ttGame.Score.
+   END.
    
    OUTPUT TO "clipboard".
    PUT UNFORMATTED iSolution SKIP.
