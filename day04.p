@@ -50,11 +50,16 @@ INDEX indLine IS UNIQUE IDLine.
 
 
 DEFINE TEMP-TABLE ttGame
-   FIELD IDGame AS INTEGER 
-   FIELD GameNr AS INTEGER 
-   FIELD Score  AS INTEGER 
-INDEX indID IS UNIQUE IDGame.
+   FIELD IDGame         AS INTEGER 
+   FIELD GameNr         AS INTEGER 
+   FIELD Score          AS INTEGER 
+   FIELD NrCards        AS INTEGER 
+   FIELD WinningNumbers AS INTEGER 
+INDEX indID IS UNIQUE IDGame
+INDEX indNr IS UNIQUE PRIMARY GameNr.
 DEFINE VARIABLE iNewIDGame AS INTEGER NO-UNDO.
+
+DEFINE BUFFER ttNextGame FOR ttGame.
 
 DEFINE TEMP-TABLE ttWinNumber
    FIELD IDWinNumber AS INTEGER 
@@ -79,7 +84,9 @@ DEFINE VARIABLE cWinNumbers AS CHARACTER NO-UNDO.
 DEFINE VARIABLE cMyNumbers  AS CHARACTER NO-UNDO.
 DEFINE VARIABLE iNumber     AS INTEGER   NO-UNDO.
 DEFINE VARIABLE cNumber     AS CHARACTER NO-UNDO.  
-DEFINE VARIABLE iOrder      AS INTEGER   NO-UNDO.  
+DEFINE VARIABLE iOrder      AS INTEGER   NO-UNDO. 
+DEFINE VARIABLE iCard       AS INTEGER   NO-UNDO. 
+DEFINE VARIABLE iNext       AS INTEGER   NO-UNDO.
    
 /* ********************  Preprocessor Definitions  ******************** */
 
@@ -191,8 +198,9 @@ DO iLine = 1 TO NUM-ENTRIES (lcInput, "~n"):
    iNewIDGame = iNewIDGame + 1.
    CREATE ttGame.
    ASSIGN 
-      ttGame.IDGame = iNewIDGame
-      ttGame.GameNr = INTEGER (TRIM (SUBSTRING (cGame, 6)))
+      ttGame.IDGame  = iNewIDGame
+      ttGame.GameNr  = INTEGER (TRIM (SUBSTRING (cGame, 6)))
+      ttGame.NrCards = 1
    .
    
    iOrder = 0.
@@ -272,7 +280,36 @@ IF lPart[2] THEN DO:
    /* Process Part Two */
    iSolution = 0.
 
+   FOR EACH ttGame:
+      DO iCard = 1 TO ttGame.NrCards:
+         IF iCard = 1 THEN DO:
+            /* Original Card */
+            FOR EACH ttMyNumber OF ttGame:
+               
+               IF CAN-FIND (ttWinNumber WHERE ttWinNumber.IDGame EQ ttMyNumber.IDGame AND ttWinNumber.Number EQ ttMyNumber.Number) THEN DO:
+                  /* Found a winning number */
+                  ttGame.WinningNumbers = ttGame.WinningNumbers + 1.
+               END.
+            END.
+         END.      
+         FOR EACH ttNextGame
+         WHERE ttNextGame.GameNr GT ttGame.GameNr
+         iNext = 1 TO ttGame.WinningNumbers:
+            ttNextGame.NrCards = ttNextGame.NrCards + 1.
+         END.
+      END.                
+   END.
      
+   IF lvlShow THEN DO:
+      RUN sy\win\wbrowsett.w
+         (INPUT TEMP-TABLE ttGame:HANDLE).
+   END.
+   
+   iSolution = 0.
+   FOR EACH ttGame:
+      iSolution = iSolution + ttGame.NrCards.
+   END.
+        
    OUTPUT TO "clipboard".
    PUT UNFORMATTED iSolution SKIP.
    OUTPUT CLOSE.
