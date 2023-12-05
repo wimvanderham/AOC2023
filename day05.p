@@ -48,6 +48,30 @@ DEFINE TEMP-TABLE ttLine
    FIELD cInputLine  AS CHARACTER FORMAT "X(80)"
 INDEX indLine IS UNIQUE IDLine.
 
+DEFINE TEMP-TABLE ttTransform
+   FIELD IDTransform AS INTEGER 
+   FIELD cFrom       AS CHARACTER 
+   FIELD cTo         AS CHARACTER 
+INDEX indID IS UNIQUE IDTransform
+INDEX indFromTo IS UNIQUE PRIMARY cFrom cTo.
+DEFINE VARIABLE iNewIDTransform AS INTEGER NO-UNDO.
+
+DEFINE TEMP-TABLE ttRange
+   FIELD IDRange     AS INTEGER 
+   FIELD IDTransform AS INTEGER 
+   FIELD cFrom       AS CHARACTER 
+   FIELD iFromStart  AS INT64     FORMAT "zzz,zzz,zzz,zz9"
+   FIELD iFromEnd    AS INT64     FORMAT "zzz,zzz,zzz,zz9"
+   FIELD cTo         AS CHARACTER 
+   FIELD iToStart    AS INT64     FORMAT "zzz,zzz,zzz,zz9"
+   FIELD iToEnd      AS INT64     FORMAT "zzz,zzz,zzz,zz9" 
+INDEX indID IS UNIQUE IDRange
+INDEX indFrom IS PRIMARY UNIQUE IDTransform cFrom iFromStart iFromEnd.
+DEFINE VARIABLE iNewIDRange AS INTEGER NO-UNDO.
+
+DEFINE VARIABLE cSection  AS CHARACTER NO-UNDO. // Section of  input file (Transform, Range)
+DEFINE VARIABLE cSeedList AS CHARACTER NO-UNDO.
+    
 /* ********************  Preprocessor Definitions  ******************** */
 
 {AOC_session.i}
@@ -139,11 +163,59 @@ DO iLine = 1 TO NUM-ENTRIES (lcInput, "~n"):
       ttLine.cInputLine = cLine
    .
 
-   /* Parsing */
+   IF TRIM (ttLine.cInputLine) EQ "" THEN DO: 
+      cSection = "".
+      NEXT.
+   END.
    
+   /* Parsing */
+   /* Where are we ? */
+   IF ttLine.cInputLine BEGINS "seeds" THEN 
+      cSection = "seeds".
+   ELSE IF LOOKUP ("to", ttLine.cInputLine, "-") NE 0 THEN 
+      cSection = "transform".
+   ELSE 
+      cSection = "range".
+   
+   CASE cSection:
+      WHEN "seeds" THEN DO:
+         ASSIGN 
+            cSeedList = TRIM (ENTRY (2, ttLine.cInputLine, ":"))
+         .
+      END.
+      WHEN "transform" THEN DO:
+         iNewIDTransform = iNewIDTransform + 1.
+         CREATE ttTransform.
+         ASSIGN 
+            ttTransform.IDTransform = iNewIDTransform
+            /* seed-to-soil map: */
+            ttTransform.cFrom = ENTRY (1, ENTRY (1, ttLine.cInputLine, " "), "-")
+            ttTransform.cTo   = ENTRY (3, ENTRY (1, ttLine.cInputLine, " "), "-")
+         .
+      END.
+      WHEN "range" THEN DO:
+         iNewIDRange = iNewIDRange + 1.
+         CREATE ttRange.
+         ASSIGN 
+            ttRange.IDRange     = iNewIDRange 
+            ttRange.IDTransform = ttTransform.IDTransform
+            ttRange.cFrom       = ttTransform.cFrom
+            ttRange.cTo         = ttTransform.cTo
+            ttRange.iFromStart  = INT64 (ENTRY (2, ttLine.cInputLine, " "))
+            ttRange.iFromEnd    = ttRange.iFromStart + INT64 (ENTRY (3, ttLine.cInputLine, " ")) - 1
+            ttRange.iToStart    = INT64 (ENTRY (1, ttLine.cInputLine, " "))
+            ttRange.iToEnd      = ttRange.iToStart +  INT64 (ENTRY (3, ttLine.cInputLine, " ")) - 1
+         .        
+      END.   
+   END.
+          
 END. /* ReadBlock: */
 
 IF lvlShow THEN DO:
+   RUN sy\win\wbrowsett.w
+      (INPUT TEMP-TABLE ttTransform:HANDLE).
+   RUN sy\win\wbrowsett.w
+      (INPUT TEMP-TABLE ttRange:HANDLE).
 END.
 
 IF lPart[1] THEN DO:
@@ -169,8 +241,7 @@ IF lPart[2] THEN DO:
    iSolution = 0.
 
    IF lvlShow THEN DO:
-      RUN sy\win\wbrowsett.w
-         (INPUT TEMP-TABLE ttGame:HANDLE).
+
    END.
 
    /* Calcolate Solution for Part 2 */
