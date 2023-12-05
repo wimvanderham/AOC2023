@@ -71,6 +71,10 @@ DEFINE VARIABLE iNewIDRange AS INTEGER NO-UNDO.
 
 DEFINE VARIABLE cSection  AS CHARACTER NO-UNDO. // Section of  input file (Transform, Range)
 DEFINE VARIABLE cSeedList AS CHARACTER NO-UNDO.
+DEFINE VARIABLE iSeed     AS INTEGER   NO-UNDO.
+DEFINE VARIABLE cSeed     AS CHARACTER NO-UNDO.
+DEFINE VARIABLE iStart    AS INT64     NO-UNDO.
+DEFINE VARIABLE iEnd      AS INT64     NO-UNDO.
     
 /* ********************  Preprocessor Definitions  ******************** */
 
@@ -79,6 +83,9 @@ DEFINE VARIABLE cSeedList AS CHARACTER NO-UNDO.
 /* ************************  Function Prototypes ********************** */
 
 /* ***************************  Main Block  *************************** */
+
+
+
 
 DISPLAY
    SUBSTITUTE ("Year &1 Day &2", iYear, iDay) FORMAT "X(16)" NO-LABELS SKIP
@@ -223,8 +230,21 @@ IF lPart[1] THEN DO:
    iSolution = 0.
 
    /* Calcolate Solution for Part 1 */
-   
-   
+   DO iSeed = 1 TO NUM-ENTRIES (cSeedList, " ").
+      cSeed = ENTRY (iSeed, cSeedList, " ").
+      iStart = INT64 (cSeed).
+      
+      RUN getEndValue
+         (INPUT  "seed",     // Start material
+          INPUT  "location", // End material 
+          INPUT  iStart,
+          OUTPUT iEnd).
+
+      IF iSolution EQ 0
+      OR iSolution GT iEnd THEN 
+         iSolution = iEnd. 
+   END.
+            
    OUTPUT TO "clipboard".
    PUT UNFORMATTED iSolution SKIP.
    OUTPUT CLOSE.
@@ -278,3 +298,45 @@ CATCH oError AS Progress.Lang.Error :
    END.
    RETURN.      
 END CATCH.
+
+
+/* **********************  Internal Procedures  *********************** */
+
+PROCEDURE getEndValue:
+/*------------------------------------------------------------------------------
+ Purpose: Return the value of the end material based on the input value
+ Notes:
+------------------------------------------------------------------------------*/
+DEFINE INPUT  PARAMETER ipcStart      AS CHARACTER NO-UNDO.
+DEFINE INPUT  PARAMETER ipcEnd        AS CHARACTER NO-UNDO.
+DEFINE INPUT  PARAMETER ipiStartValue AS INT64     NO-UNDO.
+DEFINE OUTPUT PARAMETER opiEndValue   AS INT64     NO-UNDO.
+
+DEFINE BUFFER ttTransform FOR ttTransform.
+DEFINE BUFFER ttRange     FOR ttRange.
+
+DEFINE VARIABLE iNewStartValue AS INT64 NO-UNDO.
+
+   FIND FIRST ttTransform
+   WHERE ttTransform.cFrom EQ ipcStart.
+   
+   FIND FIRST ttRange
+   WHERE ttRange.IDTransform EQ ttTransform.IDTransform
+   AND   ttRange.iFromStart  LE ipiStartValue
+   AND   ttRange.iFromEnd    GE ipiStartValue NO-ERROR.
+   IF AVAILABLE ttRange THEN
+      iNewStartValue = ttRange.iToStart + (ipiStartValue - ttRange.iFromStart).
+   ELSE
+      iNewStartValue = ipiStartValue.
+      
+   IF ttTransform.cTo EQ ipcEnd THEN 
+      opiEndValue = iNewStartValue.
+   ELSE
+      RUN getEndValue
+         (INPUT  ttTransform.cTo,
+          INPUT  ipcEnd,
+          INPUT  iNewStartValue,
+          OUTPUT opiEndValue).
+
+END PROCEDURE. /* getEndValue */
+
