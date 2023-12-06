@@ -58,8 +58,11 @@ DEFINE VARIABLE iNewIDRace AS INTEGER   NO-UNDO.
 DEFINE VARIABLE iIndex     AS INTEGER   NO-UNDO.
 DEFINE VARIABLE cTime      AS CHARACTER NO-UNDO.
 DEFINE VARIABLE cDistance  AS CHARACTER NO-UNDO.
-DEFINE VARIABLE iBeatIT    AS INTEGER   NO-UNDO.
-DEFINE VARIABLE iStart     AS INTEGER   NO-UNDO.
+DEFINE VARIABLE iBeatIT    AS INT64     NO-UNDO.
+DEFINE VARIABLE iStart     AS INT64     NO-UNDO.
+DEFINE VARIABLE iTime      AS INT64     NO-UNDO.
+DEFINE VARIABLE iDistance  AS INT64     NO-UNDO.
+DEFINE VARIABLE iWins      AS INT64     NO-UNDO.
     
 /* ********************  Preprocessor Definitions  ******************** */
 
@@ -68,8 +71,8 @@ DEFINE VARIABLE iStart     AS INTEGER   NO-UNDO.
 /* ************************  Function Prototypes ********************** */
 
 FUNCTION myDistance RETURNS INTEGER 
-   ( INPUT ipiRaceTime AS INTEGER,
-     INPUT ipiStart    AS INTEGER   ) FORWARD.
+   ( INPUT ipiRaceTime AS INT64,
+     INPUT ipiStart    AS INT64   ) FORWARD.
 
 /* ***************************  Main Block  *************************** */
 
@@ -211,7 +214,22 @@ IF lPart[1] THEN DO:
             iBeatIT = iBeatIT + 1.
       END.
       IF iBeatIT GT 0 THEN 
-         iSolution = iSolution * iBeatIT.  
+         iSolution = iSolution * iBeatIT.
+         
+      RUN calculateWins
+         (INPUT  ttRace.iTime,
+          INPUT  ttRace.iDistance,
+          OUTPUT iWins).
+      IF iWins NE iBeatIT THEN DO:
+         MESSAGE 
+         SUBSTITUTE ("Race ID&1 got incorrect results. BeatIT = &2, iWins = &3 for Time = &4 and Distance = &5.",
+                     ttRace.IDRace,
+                     iBeatIT,
+                     iWins,
+                     ttRace.iTime,
+                     ttRace.iDistance)
+         VIEW-AS ALERT-BOX.           
+      END.             
    END.
             
    OUTPUT TO "clipboard".
@@ -227,13 +245,35 @@ END. /* Process Part One */
 
 IF lPart[2] THEN DO:
    /* Process Part Two */
-   iSolution = 0.
-
-   IF lvlShow THEN DO:
-
-   END.
 
    /* Calcolate Solution for Part 2 */
+   ASSIGN 
+      cTime     = ""
+      cDistance = ""
+   .
+   FOR EACH ttRace:
+      cTime     = SUBSTITUTE ("&1&2", cTime, ttRace.iTime).
+      cDistance = SUBSTITUTE ("&1&2", cDistance, ttRace.iDistance).
+   END.
+   IF lvlDebug THEN 
+      MESSAGE "Time:" cTime SKIP 
+      "Distance:" cDistance
+      VIEW-AS ALERT-BOX.
+      
+   IF lvlDebug THEN 
+      MESSAGE "Start"
+      VIEW-AS ALERT-BOX.
+   ASSIGN
+      iTime     = INT64 (cTime)
+      iDistance = INT64 (cDistance)
+   .
+
+   RUN calculateWins
+      (INPUT  iTime,
+       INPUT  iDistance,
+       OUTPUT iWins).
+
+   iSolution = iWins.
    
    OUTPUT TO "clipboard".
    PUT UNFORMATTED iSolution SKIP.
@@ -270,18 +310,67 @@ END CATCH.
 
 /* **********************  Internal Procedures  *********************** */
 
+PROCEDURE calculateWins:
+/*------------------------------------------------------------------------------
+ Purpose: Calculate the number of wins
+ Notes:   Find the two 0 points for the equation:
+          -1 * start^2 + t * start - distance = 0
+          return the difference (which are the races won)
+------------------------------------------------------------------------------*/
+DEFINE INPUT  PARAMETER ipiTime     AS INT64 NO-UNDO.
+DEFINE INPUT  PARAMETER ipiDistance AS INT64 NO-UNDO.
+DEFINE OUTPUT PARAMETER opiWins     AS INT64 NO-UNDO.
+
+DEFINE VARIABLE iA   AS DECIMAL NO-UNDO.
+DEFINE VARIABLE iB   AS DECIMAL NO-UNDO.
+DEFINE VARIABLE iC   AS DECIMAL NO-UNDO.
+DEFINE VARIABLE iD   AS DECIMAL NO-UNDO.
+DEFINE VARIABLE deX1 AS DECIMAL NO-UNDO.
+DEFINE VARIABLE deX2 AS DECIMAL NO-UNDO.
+
+   ASSIGN 
+      iA = -1
+      iB = ipiTime
+      iC = -1 * ipiDistance
+   .
+   
+   ASSIGN
+      iD = EXP (iB, 2) - 4 * iA * iC
+   .
+   
+   ASSIGN 
+      deX1 = (-1 * iB + SQRT (iD)) / (2 * iA)
+      deX2 = (-1 * iB - SQRT (iD)) / (2 * iA)
+   .
+   
+   IF lvlDebug THEN 
+      MESSAGE "X1:" deX1 "X2:" deX2
+      VIEW-AS ALERT-BOX.
+      
+   ASSIGN 
+      deX1 = TRUNCATE (deX1, 0)
+      deX2 = TRUNCATE (deX2, 0)
+   .
+   
+   ASSIGN 
+      opiWins = INT64 (deX2 - deX1)
+   .
+   
+END PROCEDURE.
+
+
 /* ************************  Function Implementations ***************** */
 
 
 FUNCTION myDistance RETURNS INTEGER 
-   ( INPUT ipiRaceTime  AS INTEGER,
-     INPUT ipiStartTime AS INTEGER):
+   ( INPUT ipiRaceTime  AS INT64,
+     INPUT ipiStartTime AS INT64):
         
 /*------------------------------------------------------------------------------
  Purpose: Calculate the distance considering start time and race time
  Notes:
 ------------------------------------------------------------------------------*/   
-DEFINE VARIABLE iDistance AS INTEGER NO-UNDO.
+DEFINE VARIABLE iDistance AS INT64 NO-UNDO.
 
    iDistance = (ipiRaceTime - ipiStartTime) * ipiStartTime.
    
