@@ -210,34 +210,19 @@ IF lPart[1] THEN DO:
    FOR EACH ttRace:
       iBeatIT = 0.
       DO iStart = 1 TO ttRace.iTime - 1:
+         /* Brute Force approach */
          IF myDistance(ttRace.iTime, iStart) GT ttRace.iDistance THEN
             iBeatIT = iBeatIT + 1.
       END.
       IF iBeatIT GT 0 THEN 
          iSolution = iSolution * iBeatIT.
-         
-      RUN calculateWins
-         (INPUT  ttRace.iTime,
-          INPUT  ttRace.iDistance,
-          OUTPUT iWins).
-      IF iWins NE iBeatIT THEN DO:
-         MESSAGE 
-         SUBSTITUTE ("Race ID&1 got incorrect results. BeatIT = &2, iWins = &3 for Time = &4 and Distance = &5.",
-                     ttRace.IDRace,
-                     iBeatIT,
-                     iWins,
-                     ttRace.iTime,
-                     ttRace.iDistance)
-         VIEW-AS ALERT-BOX.           
-      END.             
    END.
             
    OUTPUT TO "clipboard".
    PUT UNFORMATTED iSolution SKIP.
    OUTPUT CLOSE.
    MESSAGE 
-      SUBSTITUTE ("Solution: &1.", 
-         iSolution) SKIP (1)
+      SUBSTITUTE ("Solution: &1.", iSolution) SKIP (1)
       SUBSTITUTE ("Found solution in &1 msecs.", ETIME)
    VIEW-AS ALERT-BOX TITLE " 2023 - Day 06 - Part One".
    
@@ -255,14 +240,7 @@ IF lPart[2] THEN DO:
       cTime     = SUBSTITUTE ("&1&2", cTime, ttRace.iTime).
       cDistance = SUBSTITUTE ("&1&2", cDistance, ttRace.iDistance).
    END.
-   IF lvlDebug THEN 
-      MESSAGE "Time:" cTime SKIP 
-      "Distance:" cDistance
-      VIEW-AS ALERT-BOX.
-      
-   IF lvlDebug THEN 
-      MESSAGE "Start"
-      VIEW-AS ALERT-BOX.
+
    ASSIGN
       iTime     = INT64 (cTime)
       iDistance = INT64 (cDistance)
@@ -280,8 +258,7 @@ IF lPart[2] THEN DO:
    OUTPUT CLOSE.
 
    MESSAGE 
-      SUBSTITUTE ("Solution: &1.", 
-         iSolution) SKIP (1)
+      SUBSTITUTE ("Solution: &1.", iSolution) SKIP (1)
       SUBSTITUTE ("Found solution in &1 msecs.", ETIME)
    VIEW-AS ALERT-BOX TITLE " 2023 - Day 06 - Part Two".
 END. /* Process Part Two */
@@ -315,16 +292,17 @@ PROCEDURE calculateWins:
  Purpose: Calculate the number of wins
  Notes:   Find the two 0 points for the equation:
           -1 * start^2 + t * start - distance = 0
-          return the difference (which are the races won)
+          return the difference between the two solutions X1 and X2
+          They are the races won
 ------------------------------------------------------------------------------*/
 DEFINE INPUT  PARAMETER ipiTime     AS INT64 NO-UNDO.
 DEFINE INPUT  PARAMETER ipiDistance AS INT64 NO-UNDO.
 DEFINE OUTPUT PARAMETER opiWins     AS INT64 NO-UNDO.
 
-DEFINE VARIABLE iA   AS DECIMAL NO-UNDO.
-DEFINE VARIABLE iB   AS DECIMAL NO-UNDO.
-DEFINE VARIABLE iC   AS DECIMAL NO-UNDO.
-DEFINE VARIABLE iD   AS DECIMAL NO-UNDO.
+DEFINE VARIABLE iA   AS INT64  NO-UNDO.
+DEFINE VARIABLE iB   AS INT64  NO-UNDO.
+DEFINE VARIABLE iC   AS INT64  NO-UNDO.
+DEFINE VARIABLE iD   AS INT64   NO-UNDO.
 DEFINE VARIABLE deX1 AS DECIMAL NO-UNDO.
 DEFINE VARIABLE deX2 AS DECIMAL NO-UNDO.
 
@@ -342,11 +320,7 @@ DEFINE VARIABLE deX2 AS DECIMAL NO-UNDO.
       deX1 = (-1 * iB + SQRT (iD)) / (2 * iA)
       deX2 = (-1 * iB - SQRT (iD)) / (2 * iA)
    .
-   
-   IF lvlDebug THEN 
-      MESSAGE "X1:" deX1 "X2:" deX2
-      VIEW-AS ALERT-BOX.
-      
+        
    ASSIGN 
       deX1 = TRUNCATE (deX1, 0)
       deX2 = TRUNCATE (deX2, 0)
