@@ -54,7 +54,12 @@ DEFINE TEMP-TABLE ttRace
    FIELD iDistance AS INTEGER 
 INDEX indID IS UNIQUE IDRace.
 
-DEFINE VARIABLE iNewIDRace AS INTEGER NO-UNDO.
+DEFINE VARIABLE iNewIDRace AS INTEGER   NO-UNDO.
+DEFINE VARIABLE iIndex     AS INTEGER   NO-UNDO.
+DEFINE VARIABLE cTime      AS CHARACTER NO-UNDO.
+DEFINE VARIABLE cDistance  AS CHARACTER NO-UNDO.
+DEFINE VARIABLE iBeatIT    AS INTEGER   NO-UNDO.
+DEFINE VARIABLE iStart     AS INTEGER   NO-UNDO.
     
 /* ********************  Preprocessor Definitions  ******************** */
 
@@ -62,7 +67,12 @@ DEFINE VARIABLE iNewIDRace AS INTEGER NO-UNDO.
 
 /* ************************  Function Prototypes ********************** */
 
+FUNCTION myDistance RETURNS INTEGER 
+   ( INPUT ipiRaceTime AS INTEGER,
+     INPUT ipiStart    AS INTEGER   ) FORWARD.
+
 /* ***************************  Main Block  *************************** */
+
 DISPLAY
    SUBSTITUTE ("Year &1 Day &2", iYear, iDay) FORMAT "X(16)" NO-LABELS SKIP
    lOpenURL  LABEL "Open URL?"       VIEW-AS TOGGLE-BOX SKIP
@@ -155,6 +165,32 @@ DO iLine = 1 TO NUM-ENTRIES (lcInput, "~n"):
    .
 
    /* Parsing */
+   IF iLine EQ 1 THEN DO:
+      DO iIndex = 2 TO NUM-ENTRIES (ttLine.cInputLine, " "):
+         cTime = ENTRY (iIndex, ttLine.cInputLine, " ").
+         IF TRIM (cTime) EQ "" THEN 
+            NEXT.
+         iNewIDRace = iNewIDRace + 1.
+         CREATE ttRace.
+         ASSIGN 
+            ttRace.IDRace = iNewIDRace
+            ttRace.iTime  = INTEGER (cTime)
+         .
+      END.
+   END.
+   IF iLine EQ 2 THEN DO:
+      iNewIDRace = 0.
+      DO iIndex = 2 TO NUM-ENTRIES (ttLine.cInputLine, " ").
+         cDistance = ENTRY (iIndex, ttLine.cInputLine, " ").
+         IF TRIM (cDistance) EQ "" THEN
+            NEXT.
+         iNewIDRace = iNewIDRace + 1.
+         FIND ttRace WHERE ttRace.IDRace EQ iNewIDRace.
+         ASSIGN 
+            ttRace.iDistance = INTEGER (cDistance)
+         .
+      END.
+   END.
           
 END. /* ReadBlock: */
 
@@ -165,9 +201,18 @@ END.
 
 IF lPart[1] THEN DO:
    /* Process Part One */
-   iSolution = 0.
+   iSolution = 1.
 
    /* Calcolate Solution for Part 1 */
+   FOR EACH ttRace:
+      iBeatIT = 0.
+      DO iStart = 1 TO ttRace.iTime - 1:
+         IF myDistance(ttRace.iTime, iStart) GT ttRace.iDistance THEN
+            iBeatIT = iBeatIT + 1.
+      END.
+      IF iBeatIT GT 0 THEN 
+         iSolution = iSolution * iBeatIT.  
+   END.
             
    OUTPUT TO "clipboard".
    PUT UNFORMATTED iSolution SKIP.
@@ -225,3 +270,21 @@ END CATCH.
 
 /* **********************  Internal Procedures  *********************** */
 
+/* ************************  Function Implementations ***************** */
+
+
+FUNCTION myDistance RETURNS INTEGER 
+   ( INPUT ipiRaceTime  AS INTEGER,
+     INPUT ipiStartTime AS INTEGER):
+        
+/*------------------------------------------------------------------------------
+ Purpose: Calculate the distance considering start time and race time
+ Notes:
+------------------------------------------------------------------------------*/   
+DEFINE VARIABLE iDistance AS INTEGER NO-UNDO.
+
+   iDistance = (ipiRaceTime - ipiStartTime) * ipiStartTime.
+   
+   RETURN iDistance.
+   
+END FUNCTION.
