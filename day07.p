@@ -55,6 +55,10 @@ DEFINE TEMP-TABLE ttHand
    FIELD Rank       AS INTEGER 
    FIELD Strength   AS DECIMAL   FORMAT "9.99999999999"
    FIELD WinAmount  AS DECIMAL 
+   FIELD JCards     AS CHARACTER // Substitution of J into best alternative
+   FIELD JRank      AS INTEGER 
+   FIELD JStrength  AS DECIMAL   FORMAT "9.99999999999"
+   FIELD JWinAmount AS DECIMAL 
 INDEX indID IS UNIQUE IDHand.
 DEFINE VARIABLE iNewIDHand AS INTEGER NO-UNDO.
  
@@ -67,8 +71,14 @@ DEFINE VARIABLE iNewIDHand AS INTEGER NO-UNDO.
 FUNCTION getDecimal RETURNS DECIMAL 
    ( INPUT ipcHexString AS CHARACTER ) FORWARD.
 
+FUNCTION getJStrength RETURNS DECIMAL 
+   ( INPUT  ipcCards     AS CHARACTER,
+     INPUT  ipcCardOrder AS CHARACTER,
+     OUTPUT opcJCards    AS CHARACTER ) FORWARD.
+
 FUNCTION getStrength RETURNS DECIMAL 
-   ( INPUT ipcCards AS CHARACTER ) FORWARD.
+   ( INPUT ipcCards     AS CHARACTER,
+     INPUT ipcCardOrder AS CHARACTER  ) FORWARD.
 
 /* ***************************  Main Block  *************************** */
 
@@ -176,7 +186,7 @@ DO iLine = 1 TO NUM-ENTRIES (lcInput, "~n"):
    .
              
    ASSIGN 
-      ttHand.Strength = getStrength(ttHand.Cards)
+      ttHand.Strength = getStrength(ttHand.Cards, "AKQJT98765432")
    .             
 END. /* ReadBlock: */
 
@@ -212,9 +222,29 @@ END. /* Process Part One */
 
 IF lPart[2] THEN DO:
    /* Process Part Two */
-
-   /* Calcolate Solution for Part 2 */
+   iSolution = 0.
    
+   /* Calcolate Solution for Part 2 */
+   FOR EACH ttHand:
+      ttHand.JStrength = getStrength(ttHand.Cards, "AKQT98765432J").
+      IF INDEX (ttHand.Cards, "J") NE 0 THEN
+         ttHand.JStrength = getJStrength(ttHand.Cards, "AKQT98765432J", ttHand.JCards).
+   END.
+   
+   FOR EACH ttHand
+   BY ttHand.JStrength:
+      ACCUM "" (COUNT).
+      ASSIGN 
+         ttHand.JRank = (ACCUM COUNT "")
+         ttHand.JWinAmount = ttHand.JRank * ttHand.BidAmount
+      .
+      iSolution = iSolution + ttHand.JWinAmount.
+   END.
+      
+   IF lvlShow THEN
+      RUN sy\win\wbrowsett.w
+         (INPUT TEMP-TABLE ttHand:HANDLE).
+      
    OUTPUT TO "clipboard".
    PUT UNFORMATTED iSolution SKIP.
    OUTPUT CLOSE.
@@ -278,8 +308,42 @@ DEFINE VARIABLE deValue    AS DECIMAL   NO-UNDO.
    
 END FUNCTION.
 
+FUNCTION getJStrength RETURNS DECIMAL 
+   ( INPUT  ipcJCards    AS CHARACTER,
+     INPUT  ipcCardOrder AS CHARACTER,
+     OUTPUT opcJCards    AS CHARACTER ):
+/*------------------------------------------------------------------------------
+ Purpose: Find the best card to replace the J with
+ Notes:
+------------------------------------------------------------------------------*/   
+DEFINE VARIABLE cCards        AS CHARACTER NO-UNDO INITIAL "AKQT98765432".
+DEFINE VARIABLE iCard         AS INTEGER   NO-UNDO.
+DEFINE VARIABLE cCard         AS CHARACTER NO-UNDO.
+DEFINE VARIABLE cJCards       AS CHARACTER NO-UNDO.
+DEFINE VARIABLE deStrength    AS DECIMAL   NO-UNDO.
+DEFINE VARIABLE deJStrength   AS DECIMAL   NO-UNDO.
+DEFINE VARIABLE deMaxStrength AS DECIMAL   NO-UNDO.
+
+   deStrength = getStrength (ipcJCards, ipcCardOrder).
+   deStrength = deStrength - TRUNCATE (deStrength, 0).
+   
+   DO iCard = 1 TO LENGTH (cCards):
+      cCard = SUBSTRING (cCards, iCard, 1).
+      cJCards = REPLACE (ipcJCards, "J", cCard).
+      deJStrength = TRUNCATE (getStrength(cJCards, ipcCardOrder), 0) + deStrength.
+      IF deJStrength GT deMaxStrength THEN DO:
+         deMaxStrength = deJStrength.
+         opcJCards     = cJCards.
+      END.
+   END.
+   
+   RETURN deMaxStrength.
+      
+END FUNCTION.
+
 FUNCTION getStrength RETURNS DECIMAL 
-   ( INPUT ipcCards AS CHARACTER  ):
+   ( INPUT ipcCards     AS CHARACTER,
+     INPUT ipcCardOrder AS CHARACTER ):
 /*------------------------------------------------------------------------------
  Purpose: Determine strength of cards
  Notes:   There are seven strength levels based on the combination
@@ -293,7 +357,6 @@ FUNCTION getStrength RETURNS DECIMAL
           And 13 sublevels based on the card values 
 ------------------------------------------------------------------------------*/   
 DEFINE VARIABLE iNrCards      AS INTEGER   NO-UNDO EXTENT 13. /* Number of cards per "label" */
-DEFINE VARIABLE cLabels       AS CHARACTER NO-UNDO INITIAL "AKQJT98765432".
 DEFINE VARIABLE cHexValues    AS CHARACTER NO-UNDO INITIAL "EDCBA98765432". // Hex value for single cards
 DEFINE VARIABLE cHexValue     AS CHARACTER NO-UNDO.
 DEFINE VARIABLE iLabel        AS INTEGER   NO-UNDO.
@@ -306,15 +369,10 @@ DEFINE VARIABLE lFoundPair    AS LOGICAL   NO-UNDO.
 DEFINE VARIABLE deHandValue   AS DECIMAL   NO-UNDO.
 DEFINE VARIABLE cMaxValue     AS CHARACTER NO-UNDO.
 
-   IF lvlDebug THEN DO:
-      MESSAGE SUBSTITUTE ("&1: &2", PROGRAM-NAME (1), ipcCards)
-      VIEW-AS ALERT-BOX.
-   END.
-   
    DO iCard = 1 TO LENGTH (ipcCards):
       ASSIGN 
          cCard            = SUBSTRING (ipcCards, iCard, 1)
-         iLabel           = INDEX (cLabels, cCard)
+         iLabel           = INDEX (ipcCardOrder, cCard)
          iNrCards[iLabel] = iNrCards[iLabel] + 1
       .
       // Use base 16 (Hex) for the sum of values of the single cards
@@ -362,14 +420,8 @@ DEFINE VARIABLE cMaxValue     AS CHARACTER NO-UNDO.
    
    cMaxValue = "FFFFF".
    
-   IF lvlDebug THEN 
-      MESSAGE getDecimal(cHexValue) / getDecimal(cMaxValue)
-      VIEW-AS ALERT-BOX.
-      
    deHandValue = deStrength + getDecimal(cHexValue) / getDecimal(cMaxValue).
    
    RETURN deHandValue.
    
 END FUNCTION.
-
-
