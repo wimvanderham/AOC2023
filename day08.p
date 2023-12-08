@@ -40,6 +40,7 @@ DEFINE VARIABLE iSolution    AS INT64     NO-UNDO.
 DEFINE VARIABLE lOk          AS LOGICAL   NO-UNDO.
 DEFINE VARIABLE cMessage     AS CHARACTER NO-UNDO.
 DEFINE VARIABLE lvlDebug     AS LOGICAL   NO-UNDO INITIAL FALSE.
+DEFINE VARIABLE edProgress   AS LONGCHAR  NO-UNDO.
 DEFINE VARIABLE lvlShow      AS LOGICAL   NO-UNDO INITIAL FALSE.
 DEFINE VARIABLE iPart        AS INTEGER   NO-UNDO.
 
@@ -53,23 +54,46 @@ DEFINE TEMP-TABLE ttNode
    FIELD IDNode     AS INTEGER 
    FIELD Node       AS CHARACTER 
    FIELD LNode      AS CHARACTER 
-   FIELD RNode      AS CHARACTER  
+   FIELD RNode      AS CHARACTER
+   // Extra fields for Part Two
+   FIELD isA        AS LOGICAL // Is last character A?
+   FIELD isZ        AS LOGICAL // Is last character B?  
 INDEX indID   IS UNIQUE IDNode
 INDEX indNode IS UNIQUE PRIMARY Node.
 DEFINE VARIABLE iNewIDNode AS INTEGER NO-UNDO.
+DEFINE BUFFER ttNextNode FOR ttNode.
 
+DEFINE TEMP-TABLE ttGhostNode
+   FIELD IDGhostNode  AS INTEGER
+   FIELD StartNode    AS CHARACTER 
+   FIELD CurrentNode  AS CHARACTER 
+   FIELD ExitAfter    AS INTEGER
+   FIELD Shown        AS LOGICAL  
+INDEX indID IS UNIQUE IDGhostNode.
+DEFINE VARIABLE iNewIDGhostNode AS INTEGER NO-UNDO.
+ 
 DEFINE VARIABLE cInstructions AS CHARACTER NO-UNDO.
 DEFINE VARIABLE iInstruction  AS INTEGER   NO-UNDO.
 DEFINE VARIABLE cInstruction  AS CHARACTER NO-UNDO.
 DEFINE VARIABLE cStartNode    AS CHARACTER NO-UNDO.
 DEFINE VARIABLE cEndNode      AS CHARACTER NO-UNDO.
 DEFINE VARIABLE cCurrentNode  AS CHARACTER NO-UNDO.
+DEFINE VARIABLE lAllZNodes    AS LOGICAL   NO-UNDO.
  
 /* ********************  Preprocessor Definitions  ******************** */
 
 {AOC_session.i}
 
 /* ************************  Function Prototypes ********************** */
+/* ************************  Function Implementations ***************** */
+FUNCTION gcd RETURNS INT64 (pX AS INT64, pY AS INT64):
+  IF py = 0 THEN RETURN pX.
+  RETURN gcd(pY, pX MOD pY).
+END FUNCTION.
+
+FUNCTION lcm RETURNS INT64 (pX AS INT64, pY AS INT64):
+  RETURN INT64((pX * pY) / gcd(pX, pY)).
+END FUNCTION.
 
 
 /* ***************************  Main Block  *************************** */
@@ -82,12 +106,16 @@ DISPLAY
    lPart[2]  LABEL "Solve Part 2?"   VIEW-AS TOGGLE-BOX SKIP 
    lvlDebug  LABEL "Debug?"          VIEW-AS TOGGLE-BOX SKIP 
    lvlShow   LABEL "Show?"           VIEW-AS TOGGLE-BOX SKIP
+   SKIP (2)
+   "Progress:" SKIP 
+   edProgress VIEW-AS EDITOR SIZE 76 BY 10 LARGE NO-LABELS 
 WITH FRAME fr-Parameters SIDE-LABELS ROW 3 CENTERED TITLE " Parameters ".
 ASSIGN 
    lDownload  = FALSE
    cInputfile = SUBSTITUTE ("C:\OpenEdge\WRK\AOC&1\input\&2.txt", STRING (iYear, "9999"), STRING (iDay, "99"))
    cURL       = SUBSTITUTE (cURL, iYear, iDay)
 .
+
 FILE-INFO:FILE-NAME = cInputFile.
 IF FILE-INFO:FILE-TYPE EQ ? THEN DO:
    lDownload = TRUE.
@@ -185,6 +213,10 @@ DO iLine = 1 TO NUM-ENTRIES (lcInput, "~n"):
          ttNode.LNode  = TRIM (ENTRY (1, TRIM (ENTRY (2, ttLine.cInputLine, "="))), "(")
          ttNode.RNode  = TRIM (ENTRY (2, TRIM (ENTRY (2, ttLine.cInputLine, "="))), ") ")
       .
+      ASSIGN 
+         ttNode.isA = SUBSTRING (ttNode.Node, LENGTH (ttNode.Node), 1) EQ "A"
+         ttNode.isZ = SUBSTRING (ttNode.Node, LENGTH (ttNode.Node), 1) EQ "Z"
+      .
    END. /* Node Line */             
 END. /* ReadBlock: */
 
@@ -222,10 +254,10 @@ IF lPart[1] THEN DO:
             cCurrentNode = ttNode.RNode.
       END CASE.
 
-      IF lvlDebug THEN DO:
-         MESSAGE SUBSTITUTE ("Step &1. From '&2' --(&4)--> '&3'", iSolution, ttNode.Node, cCurrentNode, cInstruction)
-         VIEW-AS ALERT-BOX.
-      END.
+/*      IF lvlDebug THEN DO:                                                                                           */
+/*         MESSAGE SUBSTITUTE ("Step &1. From '&2' --(&4)--> '&3'", iSolution, ttNode.Node, cCurrentNode, cInstruction)*/
+/*         VIEW-AS ALERT-BOX.                                                                                          */
+/*      END.                                                                                                           */
             
       IF iInstruction LT LENGTH (cInstructions) THEN 
          iInstruction = iInstruction + 1.
@@ -248,7 +280,85 @@ IF lPart[2] THEN DO:
    iSolution = 0.
    
    /* Calcolate Solution for Part 2 */
+   FOR EACH ttNode WHERE ttNode.isA EQ TRUE:
+      iNewIDGhostNode = iNewIDGhostNode + 1.
+      CREATE ttGhostNode.
+      ASSIGN 
+         ttGhostNode.IDGhostNode = iNewIDGhostNode
+         ttGhostNode.StartNode   = ttNode.Node
+         ttGhostNode.CurrentNode = ttGhostNode.StartNode
+      .
+   END.
+   IF lvlShow THEN DO:
+      RUN sy\win\wbrowsett.w
+         (INPUT TEMP-TABLE ttGhostNode:HANDLE).
+   END.
+   
+   ASSIGN
+      lAllZNodes   = FALSE  
+      iInstruction = 1
+   .
+   
+   DO WHILE lAllZNodes EQ FALSE:
+      iSolution = iSolution + 1.
       
+      cInstruction = SUBSTRING (cInstructions, iInstruction, 1).
+      FOR EACH ttGhostNode,
+      FIRST ttNode WHERE ttNode.Node EQ ttGhostNode.CurrentNode:
+         CASE cInstruction:
+            WHEN "L" THEN 
+               ttGhostNode.CurrentNode = ttNode.LNode.
+            WHEN "R" THEN
+               ttGhostNode.CurrentNode = ttNode.RNode.
+         END CASE.
+         FIND ttNextNode WHERE ttNextNode.Node EQ ttGhostNode.CurrentNode.
+         IF ttNextNode.isZ THEN DO:
+            ttGhostNode.ExitAfter = iSolution.
+            ttGhostNode.Shown     = FALSE.
+         END. 
+            
+         IF lvlShow THEN DO:
+            IF ttGhostNode.Shown EQ FALSE THEN DO: 
+               edProgress:INSERT-STRING (SUBSTITUTE ("Step &1. IDGhostNode &5. From '&2' --(&4)--> '&3' On Z Node? &6~n",
+                                                     iSolution, 
+                                                     ttNode.Node, 
+                                                     ttGhostNode.CurrentNode, 
+                                                     cInstruction,
+                                                     ttGhostNode.IDGhostNode,
+                                                     ttNextNode.isZ)).
+               ttGhostNode.Shown = TRUE.
+            END.                                                     
+            PROCESS EVENTS.
+         END.
+      END.
+
+      
+      IF iInstruction LT LENGTH (cInstructions) THEN 
+         iInstruction = iInstruction + 1.
+      ELSE 
+         iInstruction = 1.
+
+      lAllZNodes = TRUE.
+      FOR EACH ttGhostNode
+      WHERE ttGhostNode.ExitAfter EQ 0:
+         lAllZNodes = FALSE.
+      END.
+         
+   END.
+   
+   IF lvlShow THEN DO:
+      RUN sy\win\wbrowsett.w
+         (INPUT TEMP-TABLE ttGhostNode:HANDLE).
+   END.         
+
+   iSolution = 0.
+   FOR EACH ttGhostNode:
+      IF iSolution = 0 THEN 
+         iSolution = ttGhostNode.ExitAfter.
+      ELSE 
+         iSolution = lcm(iSolution, ttGhostNode.ExitAfter).
+   END.
+       
    OUTPUT TO "clipboard".
    PUT UNFORMATTED iSolution SKIP.
    OUTPUT CLOSE.
@@ -285,5 +395,4 @@ END CATCH.
 
 
 
-/* ************************  Function Implementations ***************** */
 
