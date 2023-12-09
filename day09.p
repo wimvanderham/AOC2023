@@ -50,6 +50,7 @@ DEFINE TEMP-TABLE ttLine
    FIELD cInputLine  AS CHARACTER FORMAT "X(80)"
    /* Extra field for Solution Part 1 */
    FIELD AddNumber   AS INT64 
+   FIELD PrevNumber  AS INT64 
 INDEX indLine IS UNIQUE IDLine.
 
 DEFINE TEMP-TABLE ttLineHist
@@ -58,6 +59,7 @@ DEFINE TEMP-TABLE ttLineHist
    FIELD NrHist     AS INTEGER 
    FIELD DiffLine   AS CHARACTER 
    FIELD AddNumber  AS INT64 
+   FIELD PrevNumber AS INT64 
 INDEX indID   IS UNIQUE IDLineHist
 INDEX indLine IS UNIQUE PRIMARY IDLine NrHist.
 DEFINE VARIABLE iNewIDLineHist AS INTEGER   NO-UNDO.
@@ -66,6 +68,7 @@ DEFINE VARIABLE iNrHist        AS INTEGER   NO-UNDO.
 DEFINE VARIABLE cNumberLine    AS CHARACTER NO-UNDO.
 DEFINE VARIABLE iNumber        AS INT64     NO-UNDO.
 DEFINE VARIABLE iAddNumber     AS INT64     NO-UNDO.
+DEFINE VARIABLE iPrevNumber    AS INT64     NO-UNDO.
 DEFINE VARIABLE iNextNumber    AS INT64     NO-UNDO.
 DEFINE VARIABLE iValue1        AS INT64     NO-UNDO.
 DEFINE VARIABLE iValue2        AS INT64     NO-UNDO.
@@ -297,6 +300,92 @@ IF lPart[2] THEN DO:
    iSolution = 0.
    
    /* Calcolate Solution for Part 2 */
+   EMPTY TEMP-TABLE ttLineHist.
+   FOR EACH ttLine:
+      iNrHist = 0.
+      cNumberLine = ttLine.cInputLine.
+      HistBlock:
+      REPEAT:
+         cDiffLine = "".
+         DO iNumber = 1 TO NUM-ENTRIES (cNumberLine, " ") - 1:
+            ASSIGN 
+               iValue1 = INTEGER (ENTRY (iNumber, cNumberLine, " "))
+               iValue2 = INTEGER (ENTRY (iNumber + 1, cNumberLine, " "))
+            .
+            cDiffLine = SUBSTITUTE ("&1&2&3",
+                                    cDiffLine,
+                                    (IF cDiffLine NE "" THEN " " ELSE ""),
+                                    iValue2 - iValue1).
+         END.
+         IF lvlShow AND lvlDebug THEN DO:
+            MESSAGE 
+            "Input numbers:" cNumberLine SKIP 
+            "Differences:" cDiffLine
+            VIEW-AS ALERT-BOX.
+         END.
+         
+         iNewIDLineHist = iNewIDLineHist + 1.
+         iNrHist        = iNrHist + 1.
+         CREATE ttLineHist.
+         ASSIGN 
+            ttLineHist.IDLineHist = iNewIDLineHist
+            ttLineHist.IDLine     = ttLine.IDLine
+            ttLineHist.NrHist     = iNrHist
+            ttLineHist.DiffLine   = cDiffLine
+         .
+         IF TRIM (REPLACE (cDiffLine, "0", "")) EQ "" THEN DO:
+            /* Reached the final difference, all 0's */
+            ASSIGN 
+               iPrevNumber         = 0
+               ttLineHist.DiffLine = SUBSTITUTE ("&1 &2", iPrevNumber, ttLineHist.DiffLine)
+            .
+            UpdateBlock:
+            REPEAT:
+               iNrHist = iNrHist - 1.
+               FIND  ttLineHist 
+               WHERE ttLineHist.IDLine EQ ttLine.IDLine
+               AND   ttLineHist.NrHist EQ iNrHist.
+               iNextNumber = INTEGER (ENTRY (1, ttLineHist.DiffLine, " ")) - iPrevNumber.
+               iPrevNumber = iNextNumber.
+               ttLineHist.DiffLine   = SUBSTITUTE ("&1 &2", iPrevNumber, ttLineHist.DiffLine).
+               ttLineHist.PrevNumber = iPrevNumber.
+               IF lvlShow AND lvlDebug THEN DO:
+                  MESSAGE 
+                  "NrHist:" iNrHist SKIP 
+                  "New Differences:" ttLineHist.DiffLine
+                  VIEW-AS ALERT-BOX.
+               END.
+               
+               IF iNrHist EQ 1 THEN DO:
+                  iNextNumber = INTEGER (ENTRY (1, ttLine.cInputLine, " ")) - iPrevNumber.
+                  iPrevNumber = iNextNumber.
+                  ttLine.cInputLine = SUBSTITUTE ("&1 &2", iPrevNumber, ttLine.cInputLine).
+                  ttLine.PrevNumber = iPrevNumber.
+                  IF lvlShow AND lvlDebug THEN DO:
+                     MESSAGE 
+                     "Line:" ttLine.IDLine SKIP 
+                     "New Numbers:" ttLine.cInputLine
+                     VIEW-AS ALERT-BOX.
+                  END.
+                  iSolution = iSolution + iPrevNumber.
+                  LEAVE UpdateBlock.
+               END.
+               ELSE DO:
+                  IF lvlShow AND lvlDebug THEN DO:
+                     MESSAGE "Process HistLine" iNrHist SKIP 
+                     "for inputline:" ttLine.IDLine SKIP 
+                     ttLine.cInputLine
+                     VIEW-AS ALERT-BOX.
+                  END.
+               END.
+            END.
+            LEAVE HistBlock.
+         END.
+         ELSE DO:
+            cNumberLine = ttLineHist.DiffLine.
+         END. 
+      END.
+   END.    
    
    OUTPUT TO "clipboard".
    PUT UNFORMATTED iSolution SKIP.
@@ -306,6 +395,13 @@ IF lPart[2] THEN DO:
       SUBSTITUTE ("Solution: &1.", iSolution) SKIP (1)
       SUBSTITUTE ("Found solution in &1 msecs.", ETIME)
    VIEW-AS ALERT-BOX TITLE " 2023 - Day 09 - Part Two".
+   
+   IF lvlShow THEN DO:
+      RUN sy\win\wbrowsett.w
+         (INPUT TEMP-TABLE ttLine:HANDLE).
+      RUN sy\win\wbrowsett.w
+         (INPUT TEMP-TABLE ttLineHist:HANDLE).
+   END.      
 END. /* Process Part Two */
 
 CATCH oError AS Progress.Lang.Error :
