@@ -42,6 +42,7 @@ DEFINE VARIABLE cMessage     AS CHARACTER NO-UNDO.
 DEFINE VARIABLE lvlDebug     AS LOGICAL   NO-UNDO INITIAL FALSE.
 DEFINE VARIABLE edProgress   AS LONGCHAR  NO-UNDO.
 DEFINE VARIABLE lvlShow      AS LOGICAL   NO-UNDO INITIAL FALSE.
+DEFINE VARIABLE lvlOutput    AS LOGICAL   NO-UNDO INITIAL FALSE.
 DEFINE VARIABLE iPart        AS INTEGER   NO-UNDO.
 
 /* Specific */
@@ -57,7 +58,8 @@ DEFINE TEMP-TABLE ttGrid
    FIELD Symbol AS CHARACTER
    FIELD Steps  AS INTEGER   INITIAL ?
 INDEX indID    IS UNIQUE IDGrid
-INDEX indSteps IS PRIMARY Steps.
+INDEX indGrid  iY iX
+INDEX indSteps IS PRIMARY Steps iX iY.
 DEFINE VARIABLE iNewIDGrid AS INTEGER   NO-UNDO.
 DEFINE BUFFER ttGridS    FOR ttGrid.
 DEFINE BUFFER ttNextGrid FOR ttGrid.
@@ -83,7 +85,7 @@ DEFINE TEMP-TABLE ttGridDirection
    FIELD iToX            AS INTEGER 
    FIELD iToY            AS INTEGER 
 INDEX indID     IS UNIQUE IDGridDirection
-INDEX indFromTo IS UNIQUE PRIMARY iFromX iFromY iToX iToY.
+INDEX indIDGrid IS UNIQUE PRIMARY IDGrid iFromX iFromY iToX iToY.
 DEFINE VARIABLE iNewIDGridDirection AS INTEGER NO-UNDO.
     
 DEFINE VARIABLE iX             AS INTEGER   NO-UNDO.
@@ -108,6 +110,7 @@ DISPLAY
    lPart[2]  LABEL "Solve Part 2?"   VIEW-AS TOGGLE-BOX SKIP 
    lvlDebug  LABEL "Debug?"          VIEW-AS TOGGLE-BOX SKIP 
    lvlShow   LABEL "Show?"           VIEW-AS TOGGLE-BOX SKIP
+   lvlOutput LABEL "Output?"         VIEW-AS TOGGLE-BOX SKIP 
 /*   SKIP (2)                                               */
 /*   "Progress:" SKIP                                       */
 /*   edProgress VIEW-AS EDITOR SIZE 76 BY 10 LARGE NO-LABELS*/
@@ -133,6 +136,7 @@ UPDATE
    lPart
    lvlDebug
    lvlShow
+   lvlOutput
 WITH FRAME fr-Parameters.
 
 RUN plip_aoc.p PERSISTENT SET hPLIP.
@@ -333,23 +337,26 @@ IF lvlShow THEN DO:
       (INPUT TEMP-TABLE ttDirection:HANDLE).
    RUN sy\win\wbrowsett.w
       (INPUT TEMP-TABLE ttGridDirection:HANDLE).
-            
-   OUTPUT TO "output\10.txt".
-   FOR EACH ttGrid
-   BREAK 
-   BY ttGrid.iY
-   BY ttGrid.iX:
-      FIND ttDirection WHERE ttDirection.Symbol EQ ttGrid.Symbol NO-ERROR.
-      IF AVAILABLE ttDirection THEN 
-         PUT UNFORMATTED 
-            ttDirection.Alternate.
-      ELSE 
-         PUT UNFORMATTED 
-            ttGrid.Symbol.
-      IF LAST-OF (ttGrid.iY) THEN 
-         PUT UNFORMATTED SKIP.
-   END.
-   OUTPUT CLOSE.
+         
+   IF lvlOutput THEN DO:  
+      /* Output Starting Grid with "graphical" characters */             
+      OUTPUT TO "output\10.txt".
+      FOR EACH ttGrid
+      BREAK 
+      BY ttGrid.iY
+      BY ttGrid.iX:
+         FIND ttDirection WHERE ttDirection.Symbol EQ ttGrid.Symbol NO-ERROR.
+         IF AVAILABLE ttDirection THEN 
+            PUT UNFORMATTED 
+               ttDirection.Alternate.
+         ELSE 
+            PUT UNFORMATTED 
+               ttGrid.Symbol.
+         IF LAST-OF (ttGrid.iY) THEN 
+            PUT UNFORMATTED SKIP.
+      END.
+      OUTPUT CLOSE.
+   END. /* Output Starting Grid with "graphical" characters */
 END.
 
 IF lPart[1] THEN DO:
@@ -368,6 +375,7 @@ IF lPart[1] THEN DO:
       FOR EACH ttGridS
       WHERE ttGridS.Steps EQ iCurrentSteps:
          IF ttGridS.Symbol EQ "S" THEN DO:
+            /* Determine the shape of S and reachable neighbors */
             FOR EACH ttNextGrid
             WHERE ttNextGrid.iX     GE ttGridS.iX - 1
             AND   ttNextGrid.iX     LE ttGridS.iX + 1
@@ -378,6 +386,7 @@ IF lPart[1] THEN DO:
             AND   ttNextGrid.Steps  EQ ?,
             FIRST ttDirection 
             WHERE ttDirection.Symbol EQ ttNextGrid.Symbol:
+               /* All neighbors of starting point S */
                IF ttNextGrid.iY LT ttGridS.iY THEN 
                   cLocation = "N".
                IF ttNextGrid.iY GT ttGridS.iY THEN 
@@ -394,6 +403,7 @@ IF lPart[1] THEN DO:
                
                   
                IF LOOKUP (cLocation + cTest, cComplementary) NE 0 THEN DO:
+                  /* Found a match */
                   iFound = iFound + 1.
                   ttNextGrid.Steps = iCurrentSteps + 1.
                   IF lvlShow THEN DO:
@@ -412,10 +422,11 @@ IF lPart[1] THEN DO:
                                          ttNextGrid.Symbol)
                      VIEW-AS ALERT-BOX.
                   END.
-               END.
-            END.
-         END.
+               END. /* Found a match */
+            END. /* All neighbors of starting point S */
+         END. /* Determine the shape of S and reachable neighbors */
          ELSE DO:
+            /* Use the Grid Direction temp-table to reach next grid locations */
             FOR EACH ttGridDirection
             WHERE ttGridDirection.IDGrid EQ ttGridS.IDGrid,
             FIRST ttNextGrid 
@@ -425,35 +436,39 @@ IF lPart[1] THEN DO:
                iFound = iFound + 1.
                ttNextGrid.Steps = iCurrentSteps + 1.
             END.
-         END.
+         END. /* Use the Grid Direction temp-table to reach next grid locations */
       END.
       IF iFound EQ 0 THEN 
          LEAVE.
       
-      IF iCurrentSteps MOD 1000 EQ 0 THEN DO:
-         OUTPUT TO VALUE (SUBSTITUTE ("output\10_&1.txt", iCurrentSteps)).
-         FOR EACH ttGrid
-         BREAK 
-         BY ttGrid.iY
-         BY ttGrid.iX:
-            IF ttGrid.Steps NE ? THEN
-               PUT UNFORMATTED 
-                  ttGrid.Steps MOD 10.
-            ELSE DO:
-               FIND ttDirection WHERE ttDirection.Symbol EQ ttGrid.Symbol NO-ERROR.
-               IF AVAILABLE ttDirection THEN 
+      IF lvlOutput THEN DO:
+         IF iCurrentSteps MOD 1000 EQ 0 
+         OR iCurrentSteps LE  100 THEN DO:
+            OUTPUT TO VALUE (SUBSTITUTE ("output\10_&1.txt", iCurrentSteps)).
+            FOR EACH ttGrid
+            BREAK 
+            BY ttGrid.iY
+            BY ttGrid.iX:
+               IF ttGrid.Steps NE ? THEN
                   PUT UNFORMATTED 
-                     ttDirection.Alternate.
-               ELSE 
-                  PUT UNFORMATTED 
-                     ttGrid.Symbol.
+                     ttGrid.Steps MOD 10.
+               ELSE DO:
+                  FIND ttDirection WHERE ttDirection.Symbol EQ ttGrid.Symbol NO-ERROR.
+                  IF AVAILABLE ttDirection THEN 
+                     PUT UNFORMATTED 
+                        ttDirection.Alternate.
+                  ELSE 
+                     PUT UNFORMATTED 
+                        ttGrid.Symbol.
+               END.
+               IF LAST-OF (ttGrid.iY) THEN 
+                  PUT UNFORMATTED SKIP.
             END.
-            IF LAST-OF (ttGrid.iY) THEN 
-               PUT UNFORMATTED SKIP.
+            OUTPUT CLOSE.
          END.
-         OUTPUT CLOSE.
-         
-         IF lvlShow THEN DO:   
+      END.
+      IF lvlShow THEN DO:
+         IF iCurrentSteps MOD 1000 EQ 0 THEN DO:
             MESSAGE "Steps:" iCurrentSteps
             VIEW-AS ALERT-BOX.            
             RUN sy\win\wbrowsett.w
@@ -464,6 +479,30 @@ IF lPart[1] THEN DO:
       iCurrentSteps = iCurrentSteps + 1.
    END.
 
+   IF lvlOutput THEN DO:
+      OUTPUT TO VALUE (SUBSTITUTE ("output\10_&1.txt", iCurrentSteps)).
+      FOR EACH ttGrid
+      BREAK 
+      BY ttGrid.iY
+      BY ttGrid.iX:
+         IF ttGrid.Steps NE ? THEN
+            PUT UNFORMATTED 
+               ttGrid.Steps MOD 10.
+         ELSE DO:
+            FIND ttDirection WHERE ttDirection.Symbol EQ ttGrid.Symbol NO-ERROR.
+            IF AVAILABLE ttDirection THEN 
+               PUT UNFORMATTED 
+                  ttDirection.Alternate.
+            ELSE 
+               PUT UNFORMATTED 
+                  ttGrid.Symbol.
+         END.
+         IF LAST-OF (ttGrid.iY) THEN 
+            PUT UNFORMATTED SKIP.
+      END.
+      OUTPUT CLOSE.
+   END.
+   
    iSolution = iCurrentSteps.
    
    OUTPUT TO "clipboard".
