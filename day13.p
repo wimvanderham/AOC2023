@@ -98,6 +98,7 @@ DEFINE VARIABLE lMirrorOK      AS LOGICAL NO-UNDO.
 DEFINE VARIABLE iTopRowNr      AS INTEGER NO-UNDO.
 DEFINE VARIABLE iBottomRowNr   AS INTEGER NO-UNDO.
 DEFINE VARIABLE iCenter        AS INTEGER NO-UNDO.
+DEFINE VARIABLE iDiff          AS INTEGER NO-UNDO.
    
 /* Extra temp-tables for Part Two */
 DEFINE TEMP-TABLE ttDifferences
@@ -137,9 +138,9 @@ DISPLAY
    lvlDebug  LABEL "Debug?"          VIEW-AS TOGGLE-BOX SKIP 
    lvlShow   LABEL "Show?"           VIEW-AS TOGGLE-BOX SKIP
    lvlOutput LABEL "Output?"         VIEW-AS TOGGLE-BOX SKIP 
-/*   SKIP (2)                                               */
-/*   "Progress:" SKIP                                       */
-/*   edProgress VIEW-AS EDITOR SIZE 76 BY 10 LARGE NO-LABELS*/
+   SKIP (2)
+   "Progress:" SKIP
+   edProgress VIEW-AS EDITOR SIZE 76 BY 10 LARGE NO-LABELS
 WITH FRAME fr-Parameters SIDE-LABELS ROW 3 CENTERED TITLE " Parameters ".
 
 ASSIGN 
@@ -421,84 +422,6 @@ IF lPart[2] THEN DO:
    /* Process Part Two */
    iSolution = 0.
    
-   /* Calcolate Solution for Part 2 */
-   FOR EACH ttPattern:
-      FOR EACH ttColumn OF ttPattern,
-      EACH  ttNextColumn OF ttPattern
-      WHERE ttNextColumn.ColumnNr GT ttColumn.ColumnNr:
-         IF getDifferences(ttColumn.ColumnString, ttNextColumn.ColumnString) LE 1 THEN DO:
-            iCenter = INTEGER (TRUNCATE ((ttNextColumn.ColumnNr - ttColumn.ColumnNr) / 2, 0)) + ttColumn.ColumnNr.
-            CREATE ttDifferences.
-            ASSIGN 
-               ttDifferences.IDPattern   = ttPattern.IDPattern
-               ttDifferences.lColumn     = TRUE 
-               ttDifferences.Nr1         = ttColumn.ColumnNr
-               ttDifferences.Nr2         = ttNextColumn.ColumnNr
-               ttDifferences.MirrorAt    = SUBSTITUTE ("&1&2", iCenter, iCenter + 1)
-               ttDifferences.Differences = getDifferences(ttColumn.ColumnString, ttNextColumn.ColumnString)
-            .
-         END.
-      END.
-      FOR EACH ttRow OF ttPattern,
-      EACH  ttNextRow OF ttPattern
-      WHERE ttNextRow.RowNr GT ttRow.RowNr:
-         IF getDifferences(ttRow.RowString, ttNextRow.RowString) LE 1 THEN DO:
-            iCenter = INTEGER (TRUNCATE ((ttNextRow.RowNr - ttRow.RowNr) / 2, 0)) + ttRow.RowNr.
-            CREATE ttDifferences.
-            ASSIGN 
-               ttDifferences.IDPattern   = ttPattern.IDPattern
-               ttDifferences.lColumn     = FALSE  
-               ttDifferences.Nr1         = ttRow.RowNr
-               ttDifferences.Nr2         = ttNextRow.RowNr
-               ttDifferences.MirrorAt    = SUBSTITUTE ("&1&2", iCenter, iCenter + 1)
-               ttDifferences.Differences = getDifferences(ttRow.RowString, ttNextRow.RowString)
-            .
-         END.
-      END.
-      FOR EACH ttDifferences OF ttPattern
-      BREAK 
-      BY ttDifferences.IDPattern
-      BY ttDifferences.lColumn
-      BY ttDifferences.MirrorAt:
-         IF ttDifferences.Differences EQ 1 THEN DO:
-            ttPattern.UseMirrorAt = ttDifferences.MirrorAt.
-            IF ttDifferences.lColumn THEN DO:
-               FIND  ttColumn OF ttPattern
-               WHERE ttColumn.ColumnNr EQ ttDifferences.Nr1.
-               FIND  ttNextColumn OF ttPattern
-               WHERE ttNextColumn.ColumnNr EQ ttDifferences.Nr2.
-               ASSIGN 
-                  ttColumn.ColumnString = ttNextColumn.ColumnString
-               .
-            END.
-            ELSE DO:
-               FIND  ttRow OF ttPattern
-               WHERE ttRow.RowNr EQ ttDifferences.Nr1.
-               FIND  ttNextRow OF ttPattern
-               WHERE ttNextRow.RowNr     EQ ttDifferences.Nr2 NO-ERROR.
-               IF NOT AVAILABLE ttNextRow THEN DO:
-                  MESSAGE ttDifferences.IDPattern ttPattern.IDPattern ttDifferences.Nr2
-                  VIEW-AS ALERT-BOX.
-                  RUN sy\win\wbrowsett.w
-                     (INPUT TEMP-TABLE ttNextRow:HANDLE).
-               END.
-               ELSE DO:
-                  ASSIGN 
-                     ttRow.RowString = ttNextRow.RowString
-                  .
-               END.
-            END.
-         END.               
-      END.            
-   END.       
-
-   IF lvlShow THEN DO:
-      RUN sy\win\wbrowsett.w
-         (INPUT TEMP-TABLE ttDifferences:HANDLE).
-      RUN sy\win\wbrowsett.w
-         (INPUT TEMP-TABLE ttPattern:HANDLE).
-   END.
-   
    FOR EACH ttPattern:
       /* For All Patterns */
       IF lvlDebug THEN DO:
@@ -510,91 +433,110 @@ IF lPart[2] THEN DO:
                      ttPattern.MaxRowNr)
          VIEW-AS ALERT-BOX.
       END.
-      FOR EACH ttColumn
-      WHERE ttColumn.IDPattern EQ ttPattern.IDPattern
-      AND   ttColumn.ColumnNr  LT ttPattern.MaxColumnNr,
-      FIRST ttNextColumn
-      WHERE ttNextColumn.IDPattern    EQ ttColumn.IDPattern
-      AND   ttNextColumn.ColumnNr     EQ ttColumn.ColumnNr + 1
-      AND   ttNextColumn.ColumnString EQ ttColumn.ColumnString:
-         /* Found two consecutive almost identical Columns, check their neighbours */
-         ASSIGN 
-            iLeftColumnNr  = ttColumn.ColumnNr - 1
-            iRightColumnNr = ttNextColumn.ColumnNr + 1
-            lMirrorOK      = TRUE 
-         .
-         CheckColumns:
-         DO WHILE iLeftColumnNr GE 1
-         AND iRightColumnNr     LE ttPattern.MaxColumnNr:
-            /* Check all neighbour columns */
-            FIND  ttLeftColumn
-            WHERE ttLeftColumn.IDPattern EQ ttColumn.IDPattern
-            AND   ttLeftColumn.ColumnNr  EQ iLeftColumnNr.
-            FIND  ttRightColumn
-            WHERE ttRightColumn.IDPattern EQ ttNextColumn.IDPattern
-            AND   ttRightColumn.ColumnNr  EQ iRightColumnNr.
-            
-            IF ttLeftColumn.ColumnString NE ttRightColumn.ColumnString THEN DO:
-               lMirrorOK = FALSE.
-               LEAVE CheckColumns.
-            END.
+      
+      iDiff = 0.
+      PatternBlock:
+      DO:
+         ColumnsBlock:
+         FOR EACH ttColumn
+         WHERE ttColumn.IDPattern EQ ttPattern.IDPattern
+         AND   ttColumn.ColumnNr  LT ttPattern.MaxColumnNr,
+         FIRST ttNextColumn
+         WHERE ttNextColumn.IDPattern    EQ ttColumn.IDPattern
+         AND   ttNextColumn.ColumnNr     EQ ttColumn.ColumnNr + 1:
+            IF getDifferences(ttNextColumn.ColumnString, ttColumn.ColumnString) GT 1 THEN 
+               NEXT.
+               
+            /* Found two consecutive identical Columns, check their neighbours */
             ASSIGN 
-               iLeftColumnNr  = iLeftColumnNr  - 1
-               iRightColumnNr = iRightColumnNr + 1
+               iLeftColumnNr  = ttColumn.ColumnNr - 1
+               iRightColumnNr = ttNextColumn.ColumnNr + 1
+               lMirrorOK      = TRUE 
+               iDiff          = getDifferences(ttNextColumn.ColumnString, ttColumn.ColumnString)
             .
-         END. /* Check all neighbour columns */
-         IF lMirrorOK = TRUE THEN DO:
-            MESSAGE SUBSTITUTE ("Pattern: &1, add column &2", ttColumn.IDPattern, ttColumn.ColumnNr)
-            VIEW-AS ALERT-BOX. 
-            ttPattern.LeftColumns = ttColumn.ColumnNr.
+            CheckColumns:
+            DO WHILE iLeftColumnNr GE 1
+            AND iRightColumnNr LE ttPattern.MaxColumnNr:
+               /* Check all neighbour columns */
+               FIND  ttLeftColumn
+               WHERE ttLeftColumn.IDPattern EQ ttColumn.IDPattern
+               AND   ttLeftColumn.ColumnNr  EQ iLeftColumnNr.
+               FIND  ttRightColumn
+               WHERE ttRightColumn.IDPattern EQ ttNextColumn.IDPattern
+               AND   ttRightColumn.ColumnNr  EQ iRightColumnNr.
+               IF getDifferences(ttLeftColumn.ColumnString, ttRightColumn.ColumnString) GT 1 THEN DO:
+                  lMirrorOK = FALSE.
+                  LEAVE CheckColumns.
+               END.
+               ASSIGN 
+                  iLeftColumnNr  = iLeftColumnNr  - 1
+                  iRightColumnNr = iRightColumnNr + 1
+                  iDiff          = iDiff + getDifferences(ttLeftColumn.ColumnString, ttRightColumn.ColumnString) 
+               .
+            END. /* Check all neighbour columns */
+            IF lMirrorOK = TRUE AND iDiff EQ 1 THEN DO:
+               ttPattern.LeftColumns = ttColumn.ColumnNr.
+               IF iDiff EQ 1 THEN
+                  LEAVE ColumnsBlock.
+            END.
+         END. /* Found two consecutive identical Columns, check their neighbours */
+         
+         IF ttPattern.LeftColumns NE 0 THEN DO:
             iSolution = iSolution + ttPattern.LeftColumns.
+            edProgress:INSERT-STRING (SUBSTITUTE ("Pattern &1 add column &2~n", ttPattern.IDPattern, ttPattern.LeftColumns)).
+            LEAVE PatternBlock.
          END.
-      END. /* Found two consecutive identical Columns, check their neighbours */
-      
-      /* Check Mirrored Rows */
-      FOR EACH ttRow
-      WHERE ttRow.IDPattern EQ ttPattern.IDPattern
-      AND   ttRow.RowNr     LT ttPattern.MaxRowNr,
-      FIRST ttNextRow
-      WHERE ttNextRow.IDPattern EQ ttRow.IDPattern
-      AND   ttNextRow.RowNr     EQ ttRow.RowNr + 1
-      AND   ttNextRow.RowString EQ ttRow.RowString:
-         /* Found two consecutive almost identical Rows, check their neighbours */
-         ASSIGN 
-            iTopRowNr    = ttRow.RowNr     - 1
-            iBottomRowNr = ttNextRow.RowNr + 1
-            lMirrorOK    = TRUE 
-         .
-         CheckRows:
-         DO WHILE iTopRowNr GE 1
-         AND iBottomRowNr   LE ttPattern.MaxRowNr:
-            /* Check all neighbour Rows */
-            FIND  ttTopRow
-            WHERE ttTopRow.IDPattern EQ ttRow.IDPattern
-            AND   ttTopRow.RowNr     EQ iTopRowNr.
-            FIND  ttBottomRow
-            WHERE ttBottomRow.IDPattern EQ ttNextRow.IDPattern
-            AND   ttBottomRow.RowNr     EQ iBottomRowNr.
-            IF ttBottomRow.RowString NE ttTopRow.RowString THEN DO:
-               lMirrorOK = FALSE.
-               LEAVE CheckRows.
+               
+         /* Check Mirrored Rows */
+         RowsBlock:
+         FOR EACH ttRow
+         WHERE ttRow.IDPattern EQ ttPattern.IDPattern
+         AND   ttRow.RowNr     LT ttPattern.MaxRowNr,
+         FIRST ttNextRow
+         WHERE ttNextRow.IDPattern EQ ttRow.IDPattern
+         AND   ttNextRow.RowNr     EQ ttRow.RowNr + 1:
+            IF getDifferences(ttNextRow.RowString, ttRow.RowString) GT 1 THEN 
+               NEXT.
+               
+            /* Found two consecutive identical Rows, check their neighbours */
+            ASSIGN 
+               iTopRowNr    = ttRow.RowNr     - 1
+               iBottomRowNr = ttNextRow.RowNr + 1
+               lMirrorOK    = TRUE 
+               iDiff        = getDifferences(ttNextRow.RowString, ttRow.RowString) 
+            .
+            CheckRows:
+            DO WHILE iTopRowNr GE 1
+            AND iBottomRowNr   LE ttPattern.MaxRowNr:
+               /* Check all neighbour Rows */
+               FIND  ttTopRow
+               WHERE ttTopRow.IDPattern EQ ttRow.IDPattern
+               AND   ttTopRow.RowNr     EQ iTopRowNr.
+               FIND  ttBottomRow
+               WHERE ttBottomRow.IDPattern EQ ttNextRow.IDPattern
+               AND   ttBottomRow.RowNr     EQ iBottomRowNr.
+               IF getDifferences(ttTopRow.RowString, ttBottomRow.RowString) GT 1 THEN DO:
+                  lMirrorOK = FALSE.
+                  LEAVE CheckRows.
+               END.
+               ASSIGN 
+                  iTopRowNr    = iTopRowNr    - 1
+                  iBottomRowNr = iBottomRowNr + 1
+                  iDiff        = iDiff + getDifferences(ttTopRow.RowString, ttBottomRow.RowString)
+               .
+            END. /* Check all neighbour Rows */
+            IF lMirrorOK = TRUE AND iDiff EQ 1 THEN DO:
+               ttPattern.TopRows = ttRow.RowNr.
+               IF iDiff EQ 1 THEN 
+                  LEAVE RowsBlock.
             END.
-            ASSIGN 
-               iTopRowNr    = iTopRowNr  - 1
-               iBottomRowNr = iBottomRowNr + 1
-            .
-         END. /* Check all neighbour Rows */
-         IF lMirrorOK = TRUE THEN DO:
-            ASSIGN 
-               ttPattern.TopRows = ttRow.RowNr
-               iSolution = iSolution + 100 * ttPattern.TopRows
-            .
-            MESSAGE SUBSTITUTE ("Pattern: &1, add row &2", ttRow.IDPattern, 100 * ttRow.RowNr)
-            VIEW-AS ALERT-BOX. 
-         END.            
-      END. /* Check Mirrored Rows */
-      
-   END. /* For All Patterns */
+         END. /* Check Mirrored Rows */
+         IF ttPattern.TopRows NE 0 THEN DO:
+            iSolution = iSolution + 100 * ttPattern.TopRows.
+            edProgress:INSERT-STRING (SUBSTITUTE ("Pattern &1 add row &2~n", ttPattern.IDPattern, ttPattern.TopRows)).
+         END.
+      END. /* PatternBlock */         
+   END. /* For All Patterns */      
    
    OUTPUT TO "clipboard".
    PUT UNFORMATTED iSolution SKIP.
@@ -608,6 +550,10 @@ IF lPart[2] THEN DO:
    IF lvlShow THEN DO:
       RUN sy\win\wbrowsett.w
          (INPUT TEMP-TABLE ttPattern:HANDLE).
+      ENABLE  
+      edProgress
+      WITH FRAME fr-Parameters.
+      WAIT-FOR CLOSE OF THIS-PROCEDURE.
    END.      
 END. /* Process Part Two */
 
