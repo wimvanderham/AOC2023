@@ -90,11 +90,15 @@ DEFINE VARIABLE iNewIDGridDirection AS INTEGER NO-UNDO.
     
 DEFINE VARIABLE iX             AS INTEGER   NO-UNDO.
 DEFINE VARIABLE iY             AS INTEGER   NO-UNDO.
+DEFINE VARIABLE iMaxX          AS INTEGER   NO-UNDO.
+DEFINE VARIABLE iMaxY          AS INTEGER   NO-UNDO.
 DEFINE VARIABLE cLocation      AS CHARACTER NO-UNDO.
 DEFINE VARIABLE cTest          AS CHARACTER NO-UNDO.
 DEFINE VARIABLE cComplementary AS CHARACTER NO-UNDO INITIAL "WE,NS,EW,SN".
 DEFINE VARIABLE iCurrentSteps  AS INTEGER   NO-UNDO.
 DEFINE VARIABLE iFound         AS INTEGER   NO-UNDO.
+DEFINE VARIABLE lInside        AS LOGICAL   NO-UNDO.
+DEFINE VARIABLE lUp            AS LOGICAL   NO-UNDO.
 
 /* ********************  Preprocessor Definitions  ******************** */
 
@@ -294,6 +298,7 @@ DO iLine = 1 TO NUM-ENTRIES (lcInput, "~n"):
       ttLine.cInputLine = cLine
    .
 
+   iMaxX = LENGTH (ttLine.cInputLine).
    DO iX = 1 TO LENGTH (ttLine.cInputLine):
       iNewIDGrid = iNewIDGrid + 1.
       CREATE ttGrid.
@@ -327,7 +332,8 @@ DO iLine = 1 TO NUM-ENTRIES (lcInput, "~n"):
             ttGridDirection.iToY            = ttGrid.iY + ttDirection.iDeltaY2
          . 
       END.          
-   END.      
+   END.
+   iMaxY = ttLine.IDLine.      
 END. /* ReadBlock: */
 
 IF lvlShow THEN DO:
@@ -501,6 +507,27 @@ IF lPart[1] THEN DO:
             PUT UNFORMATTED SKIP.
       END.
       OUTPUT CLOSE.
+      OUTPUT TO VALUE (SUBSTITUTE ("output\10_&1_clean.txt", iCurrentSteps)).
+      FOR EACH ttGrid
+      BREAK 
+      BY ttGrid.iY
+      BY ttGrid.iX:
+         IF ttGrid.Steps NE ? THEN DO:
+            FIND ttDirection WHERE ttDirection.Symbol EQ ttGrid.Symbol NO-ERROR.
+            IF AVAILABLE ttDirection THEN 
+               PUT UNFORMATTED 
+                  ttDirection.Alternate.
+            ELSE
+               PUT UNFORMATTED 
+                  ttGrid.Symbol.
+         END.
+         ELSE DO:
+            PUT UNFORMATTED ".".
+         END.
+         IF LAST-OF (ttGrid.iY) THEN 
+            PUT UNFORMATTED SKIP.
+      END.
+      OUTPUT CLOSE.
    END.
    
    iSolution = iCurrentSteps.
@@ -524,8 +551,40 @@ IF lPart[2] THEN DO:
    /* Process Part Two */
    iSolution = 0.
    
-   /* Calcolate Solution for Part 2 */
+   FOR EACH ttGrid
+   WHERE ttGrid.Steps  EQ ?
+   AND   ttGrid.Symbol NE ".":
+      /* Remove rubish */
+      ttGrid.Symbol = ".".
+   END.
    
+   /* Calcolate Solution for Part 2 */
+   lInside = FALSE.
+   lUp     = ?.
+   DO iY = 1 TO iMaxY:
+      DO iX = 1 TO iMaxX:
+         FIND  ttGrid
+         WHERE ttGrid.iX EQ iX
+         AND   ttGrid.iY EQ iY.
+         CASE ttGrid.Symbol:
+            WHEN "|" THEN 
+               lInside = NOT lInside.
+            WHEN "." THEN DO:
+               IF lInside THEN 
+                  iSolution = iSolution + 1.
+            END.
+            WHEN "F" THEN
+               lUp = TRUE.
+            WHEN "J" THEN 
+               IF lUp EQ TRUE  THEN lInside = NOT lInside.
+            WHEN "L" THEN 
+               lUp = FALSE.
+            WHEN "7" THEN 
+               IF lUp EQ FALSE THEN lInside = NOT lInside. 
+         END CASE.
+      END. /* DO iX */
+   END. /* DO iY */               
+                     
    OUTPUT TO "clipboard".
    PUT UNFORMATTED iSolution SKIP.
    OUTPUT CLOSE.
