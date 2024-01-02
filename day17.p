@@ -289,13 +289,12 @@ IF lPart[1] THEN DO:
       FIND FIRST ttStack USE-INDEX popleft.
 
       IF lvlShow THEN DO:
-         edProgress:INSERT-STRING (SUBSTITUTE ("Pop #&1 (&2,&3) &4 x &5 &6.",
+         edProgress:INSERT-STRING (SUBSTITUTE ("Pop #&1 (&2,&3) &4 x &5.",
                                                ttStack.IDStack,
                                                ttStack.iX,
                                                ttStack.iY,
                                                ttStack.Nr,
-                                               ttStack.Direction,
-                                               ttStack.Previous)).
+                                               ttStack.Direction)).
          PROCESS EVENTS.
       END.                                               
 
@@ -335,7 +334,7 @@ IF lPart[1] THEN DO:
       WHERE ttGrid.iX EQ ttStack.iX
       AND   ttGrid.iY EQ ttStack.iY.
             
-      /* To check "normal" Dijkstra, remove the check ttStack.Nr LT 3 */
+      /* For "normal" Dijkstra, remove the check ttStack.Nr LT 3 */
       IF ttStack.Nr LT 3
       AND ttStack.Direction NE "" THEN DO:
          /* Continue in this direction */
@@ -365,7 +364,7 @@ IF lPart[1] THEN DO:
       FIRST ttNextGrid
       WHERE ttNextGrid.iX = ttGrid.iX + ttDirection.deltaX
       AND   ttNextGrid.iY = ttGrid.iY + ttDirection.deltaY:
-         /* Explore alternative directions */
+         /* Explore alternative directions, but not the opposite way */
          iNewIDStack = iNewIDStack + 1.
          CREATE ttNewStack.
          ASSIGN 
@@ -377,8 +376,9 @@ IF lPart[1] THEN DO:
             ttNewStack.Previous  = SUBSTITUTE ("&1&2", ttDirection.Direction, ttStack.Previous)
             ttNewStack.Nr        = 1
          .
-      END. /* Explore alternative directions */
+      END. /* Explore alternative directions, but not the opposite way */
             
+      /* Processed ttStack, remove it */
       DELETE ttStack.
       
    END. /* PopBlock */
@@ -394,6 +394,10 @@ IF lPart[1] THEN DO:
    IF lvlShow THEN DO:
       RUN sy\win\wbrowsett.w
          (INPUT TEMP-TABLE ttGrid:HANDLE).
+      RUN sy\win\wbrowsett.w
+         (INPUT TEMP-TABLE ttStack:HANDLE).
+      RUN sy\win\wbrowsett.w
+         (INPUT TEMP-TABLE ttSeen:HANDLE).
    END.            
 END. /* Process Part One */
 
@@ -427,13 +431,12 @@ IF lPart[2] THEN DO:
       FIND FIRST ttStack USE-INDEX popleft.
 
       IF lvlShow THEN DO:
-         edProgress:INSERT-STRING (SUBSTITUTE ("Pop #&1 (&2,&3) &4 x &5 &6.",
+         edProgress:INSERT-STRING (SUBSTITUTE ("Pop #&1 (&2,&3) &4 x &5.",
                                                ttStack.IDStack,
                                                ttStack.iX,
                                                ttStack.iY,
                                                ttStack.Nr,
-                                               ttStack.Direction,
-                                               ttStack.Previous)).
+                                               ttStack.Direction)).
          PROCESS EVENTS.
       END.                                               
 
@@ -535,6 +538,12 @@ IF lPart[2] THEN DO:
    VIEW-AS ALERT-BOX TITLE " 2023 - Day 17 - Part Two".
    
    IF lvlShow THEN DO:
+      RUN sy\win\wbrowsett.w
+         (INPUT TEMP-TABLE ttGrid:HANDLE).
+      RUN sy\win\wbrowsett.w
+         (INPUT TEMP-TABLE ttStack:HANDLE).
+      RUN sy\win\wbrowsett.w
+         (INPUT TEMP-TABLE ttSeen:HANDLE).
    END.      
 END. /* Process Part Two */
 
@@ -609,7 +618,6 @@ DEFINE BUFFER ttDirection FOR ttDirection.
 DEFINE BUFFER ttGrid      FOR ttGrid.
 DEFINE BUFFER ttNextGrid  FOR ttGrid.
 
-DEFINE VARIABLE iGrid AS INTEGER   NO-UNDO.
 DEFINE VARIABLE iX    AS INTEGER   NO-UNDO.
 DEFINE VARIABLE iY    AS INTEGER   NO-UNDO.
 DEFINE VARIABLE cPath AS CHARACTER NO-UNDO.
@@ -634,7 +642,6 @@ DEFINE VARIABLE cPath AS CHARACTER NO-UNDO.
       cChar = SUBSTRING (ttStack.Previous, iChar, 1).
       FIND  ttDirection
       WHERE ttDirection.Direction EQ cChar.
-      cPath = SUBSTITUTE ("&1&2&3", cPath, (IF cPath NE "" THEN ", " ELSE ""), ttDirection.Arrow).
       FIND  ttNextGrid
       WHERE ttNextGrid.iX EQ (ttGrid.iX + ttDirection.deltaX)
       AND   ttNextGrid.iY EQ (ttGrid.iY + ttDirection.deltaY).
@@ -642,32 +649,27 @@ DEFINE VARIABLE cPath AS CHARACTER NO-UNDO.
          ttNextGrid.Touched = TRUE  
          ttNextGrid.Symbol  = ttDirection.Arrow
       .
+      cPath = SUBSTITUTE ("&1&2&3", cPath, (IF cPath NE "" THEN " + " ELSE ""), ttNextGrid.Number).
       FIND ttGrid WHERE ttGrid.IDGrid EQ ttNextGrid.IDGrid.
    END.
    
    OUTPUT TO VALUE (cOutputFile).
-   DO iGrid = 1 TO 2:
-      /* Show starting Grid with numbers and
-      ** Grid with path
-      */
-      FOR EACH ttGrid
-      BREAK 
-      BY ttGrid.iY
-      BY ttGrid.iX:
-         IF ttGrid.Touched AND iGrid EQ 2 THEN
-            PUT UNFORMATTED 
-               ttGrid.Symbol.
-         ELSE 
-            PUT UNFORMATTED 
-               ttGrid.Number.
-   
-         IF LAST-OF (ttGrid.iY) THEN DO:
-            PUT UNFORMATTED 
-               SKIP.
-         END.
+   /* Show Grid with path */
+   FOR EACH ttGrid
+   BREAK 
+   BY ttGrid.iY
+   BY ttGrid.iX:
+      IF ttGrid.Touched THEN
+         PUT UNFORMATTED 
+            ttGrid.Symbol.
+      ELSE
+         PUT UNFORMATTED 
+            ".".
+
+      IF LAST-OF (ttGrid.iY) THEN DO:
+         PUT UNFORMATTED 
+            SKIP.
       END.
-      
-      PUT UNFORMATTED SKIP (1).
    END.
    
    PUT UNFORMATTED SKIP (1)
