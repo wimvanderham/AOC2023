@@ -305,7 +305,7 @@ IF lPart[1] THEN DO:
          IF lvlOutput THEN DO:
             RUN outputGrid
                (INPUT iDay,
-                INPUT "End",
+                INPUT "PartOne_End",
                 INPUT ttStack.IDStack).
          END.
          LEAVE PopBlock.
@@ -335,7 +335,8 @@ IF lPart[1] THEN DO:
       WHERE ttGrid.iX EQ ttStack.iX
       AND   ttGrid.iY EQ ttStack.iY.
             
-      IF (ttStack.Nr LT 3 OR lvlDebug)
+      /* To check "normal" Dijkstra, remove the check ttStack.Nr LT 3 */
+      IF ttStack.Nr LT 3
       AND ttStack.Direction NE "" THEN DO:
          /* Continue in this direction */
          FIND  ttDirection 
@@ -440,6 +441,13 @@ IF lPart[2] THEN DO:
       AND ttStack.iY EQ iMaxY 
       AND ttStack.Nr GE 4 THEN DO:
          iSolution = ttStack.HeatLoss.
+         IF lvlOutput THEN DO:
+            RUN outputGrid
+               (INPUT iDay,
+                INPUT "PartTwo_End",
+                INPUT ttStack.IDStack).
+         END.
+         
          LEAVE PopBlock.
       END.
       
