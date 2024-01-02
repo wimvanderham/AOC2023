@@ -61,6 +61,7 @@ DEFINE TEMP-TABLE ttGrid
    FIELD Previous   AS CHARACTER  
    FIELD HeatLoss   AS INTEGER 
    FIELD Touched    AS LOGICAL 
+   FIELD Symbol     AS CHARACTER 
 INDEX indID IS UNIQUE IDGrid
 INDEX indXY IS PRIMARY iX iY.
 DEFINE VARIABLE iNewIDGrid AS INTEGER NO-UNDO.
@@ -73,6 +74,7 @@ DEFINE TEMP-TABLE ttDirection
    FIELD deltaX      AS INTEGER 
    FIELD deltaY      AS INTEGER 
    FIELD Opposite    AS CHARACTER 
+   FIELD Arrow       AS CHARACTER 
 INDEX indID IS UNIQUE IDDirection.
 DEFINE VARIABLE iNewIDDirection AS INTEGER NO-UNDO.
 
@@ -228,6 +230,9 @@ DO iLine = 1 TO NUM-ENTRIES (lcInput, "~n"):
       /* Empty Line */
       NEXT.
    END.
+   
+   IF cLine EQ "." THEN 
+      LEAVE.
       
    CREATE ttLine.
    ASSIGN 
@@ -297,6 +302,12 @@ IF lPart[1] THEN DO:
       IF  ttStack.iX EQ iMaxX
       AND ttStack.iY EQ iMaxY THEN DO:
          iSolution = ttStack.HeatLoss.
+         IF lvlOutput THEN DO:
+            RUN outputGrid
+               (INPUT iDay,
+                INPUT "End",
+                INPUT ttStack.IDStack).
+         END.
          LEAVE PopBlock.
       END.
       
@@ -324,7 +335,7 @@ IF lPart[1] THEN DO:
       WHERE ttGrid.iX EQ ttStack.iX
       AND   ttGrid.iY EQ ttStack.iY.
             
-      IF  ttStack.Nr LT 3
+      IF (ttStack.Nr LT 3 OR lvlDebug)
       AND ttStack.Direction NE "" THEN DO:
          /* Continue in this direction */
          FIND  ttDirection 
@@ -551,8 +562,9 @@ PROCEDURE fillDirections:
  Notes:
 ------------------------------------------------------------------------------*/
 DEFINE VARIABLE cDirections AS CHARACTER NO-UNDO INITIAL "N,W,S,E".
+DEFINE VARIABLE cArrows     AS CHARACTER NO-UNDO INITIAL "^,<,V,>".
 DEFINE VARIABLE cOpposites  AS CHARACTER NO-UNDO INITIAL "S,E,N,W".
-DEFINE VARIABLE cListaX     AS CHARACTER NO-UNDO INITIAL "0,+1,0,-1".
+DEFINE VARIABLE cListaX     AS CHARACTER NO-UNDO INITIAL "0,-1,0,+1".
 DEFINE VARIABLE cListaY     AS CHARACTER NO-UNDO INITIAL "-1,0,+1,0".
 
 DEFINE VARIABLE iDirection AS INTEGER NO-UNDO.
@@ -566,6 +578,7 @@ DEFINE VARIABLE iDirection AS INTEGER NO-UNDO.
          ttDirection.deltaX      = INTEGER (ENTRY (iDirection, cListaX))
          ttDirection.deltaY      = INTEGER (ENTRY (iDirection, cListaY))
          ttDirection.Opposite    = ENTRY (iDirection, cOpposites)
+         ttDirection.Arrow       = ENTRY (iDirection, cArrows)
       .
    END.
       
@@ -577,50 +590,82 @@ PROCEDURE outputGrid:
  Purpose: Output a grid to a file
  Notes:
 ------------------------------------------------------------------------------*/
-DEFINE INPUT  PARAMETER ipiRound AS INTEGER NO-UNDO.
+DEFINE INPUT  PARAMETER ipiDay     AS INTEGER   NO-UNDO.
+DEFINE INPUT  PARAMETER ipcNr      AS CHARACTER NO-UNDO.
+DEFINE INPUT  PARAMETER ipiIDStack AS INTEGER   NO-UNDO.
 
 DEFINE VARIABLE cOutputFile AS CHARACTER NO-UNDO.
-   cOutputFile = SUBSTITUTE ("output\17_&1.txt", ipiRound).
+
+DEFINE BUFFER ttStack     FOR ttStack.
+DEFINE BUFFER ttDirection FOR ttDirection.
+DEFINE BUFFER ttGrid      FOR ttGrid.
+DEFINE BUFFER ttNextGrid  FOR ttGrid.
+
+DEFINE VARIABLE iGrid AS INTEGER   NO-UNDO.
+DEFINE VARIABLE iX    AS INTEGER   NO-UNDO.
+DEFINE VARIABLE iY    AS INTEGER   NO-UNDO.
+DEFINE VARIABLE cPath AS CHARACTER NO-UNDO.
+
+   cOutputFile = SUBSTITUTE ("output\&1_&2.txt", 
+                             ipiDay,
+                             ipcNr).
+
+   
+   FIND ttStack WHERE ttStack.IDStack EQ ipiIDStack.
+   
+   ASSIGN 
+      iX = 1
+      iY = 1
+   .
+   FIND  ttGrid 
+   WHERE ttGrid.iX EQ iX
+   AND   ttGrid.iY EQ iY.
+   
+   /* Fill in arrows in grid */
+   DO iChar = LENGTH (ttStack.Previous) TO 1 BY -1:
+      cChar = SUBSTRING (ttStack.Previous, iChar, 1).
+      FIND  ttDirection
+      WHERE ttDirection.Direction EQ cChar.
+      cPath = SUBSTITUTE ("&1&2&3", cPath, (IF cPath NE "" THEN ", " ELSE ""), ttDirection.Arrow).
+      FIND  ttNextGrid
+      WHERE ttNextGrid.iX EQ (ttGrid.iX + ttDirection.deltaX)
+      AND   ttNextGrid.iY EQ (ttGrid.iY + ttDirection.deltaY).
+      ASSIGN 
+         ttNextGrid.Touched = TRUE  
+         ttNextGrid.Symbol  = ttDirection.Arrow
+      .
+      FIND ttGrid WHERE ttGrid.IDGrid EQ ttNextGrid.IDGrid.
+   END.
    
    OUTPUT TO VALUE (cOutputFile).
-   FOR EACH ttGrid
-   BREAK 
-   BY ttGrid.iY
-   BY ttGrid.iX:
-      IF ttGrid.Touched THEN
-         PUT UNFORMATTED 
-            "O".
-      ELSE 
-         PUT UNFORMATTED 
-            ttGrid.Number.
-
-      /*         
-      IF ttGrid.Symbol EQ "." THEN DO:
-         FOR EACH ttBeam
-         WHERE    ttBeam.iX EQ ttGrid.iX
-         AND      ttBeam.iY EQ ttGrid.iY:
-            ACCUM "" (COUNT).
-         END.
-         IF (ACCUM COUNT "") GT 0 THEN DO:
-            PUT UNFORMATTED
-            (ACCUM COUNT "") MOD 10.
-         END.
-         ELSE DO:
+   DO iGrid = 1 TO 2:
+      /* Show starting Grid with numbers and
+      ** Grid with path
+      */
+      FOR EACH ttGrid
+      BREAK 
+      BY ttGrid.iY
+      BY ttGrid.iX:
+         IF ttGrid.Touched AND iGrid EQ 2 THEN
             PUT UNFORMATTED 
                ttGrid.Symbol.
+         ELSE 
+            PUT UNFORMATTED 
+               ttGrid.Number.
+   
+         IF LAST-OF (ttGrid.iY) THEN DO:
+            PUT UNFORMATTED 
+               SKIP.
          END.
       END.
-      ELSE DO:
-         PUT UNFORMATTED 
-            ttGrid.Symbol.
-      END.
-      */
-      IF LAST-OF (ttGrid.iY) THEN DO:
-         PUT UNFORMATTED 
-            SKIP.
-      END.
+      
+      PUT UNFORMATTED SKIP (1).
    END.
-
+   
+   PUT UNFORMATTED SKIP (1)
+      "Heat Loss: " ttStack.HeatLoss SKIP 
+      "Path.....: " cPath            SKIP.
+      
    OUTPUT CLOSE.            
 
 END PROCEDURE.
