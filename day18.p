@@ -45,7 +45,7 @@ DEFINE VARIABLE lvlShow      AS LOGICAL   NO-UNDO INITIAL FALSE.
 DEFINE VARIABLE lvlOutput    AS LOGICAL   NO-UNDO INITIAL FALSE.
 DEFINE VARIABLE cOutputFile  AS CHARACTER NO-UNDO.
 DEFINE VARIABLE iPart        AS INTEGER   NO-UNDO.
-DEFINE VARIABLE lviMethod    AS INTEGER   NO-UNDO.
+DEFINE VARIABLE lviMethod    AS INTEGER   NO-UNDO INITIAL 1.
 
 /* Specific */
 DEFINE TEMP-TABLE ttLine
@@ -108,10 +108,10 @@ DEFINE VARIABLE iStep          AS INTEGER   NO-UNDO.
 DEFINE VARIABLE lInside        AS LOGICAL   NO-UNDO.
 DEFINE VARIABLE lUp            AS LOGICAL   NO-UNDO.
 /* Alternative formula Shoelace formula */
-DEFINE VARIABLE iSum           AS INTEGER NO-UNDO.
-DEFINE VARIABLE iArea          AS INTEGER NO-UNDO.
-DEFINE VARIABLE iInterior      AS INTEGER NO-UNDO.
-DEFINE VARIABLE iBoundary      AS INTEGER NO-UNDO.
+DEFINE VARIABLE iSum           AS INT64 NO-UNDO.
+DEFINE VARIABLE iArea          AS INT64 NO-UNDO.
+DEFINE VARIABLE iInterior      AS INT64 NO-UNDO.
+DEFINE VARIABLE iBoundary      AS INT64 NO-UNDO.
 
 
 /* ********************  Preprocessor Definitions  ******************** */
@@ -131,14 +131,14 @@ DISPLAY
    lOpenURL  LABEL "Open URL?"       VIEW-AS TOGGLE-BOX SKIP
    lDownload LABEL "Download Input?" VIEW-AS TOGGLE-BOX SKIP   
    lPart[1]  LABEL "Solve Part 1?"   VIEW-AS TOGGLE-BOX SKIP
-   lviMethod LABEL "Choose method"   VIEW-AS FILL-IN FORMAT "9" SKIP 
    lPart[2]  LABEL "Solve Part 2?"   VIEW-AS TOGGLE-BOX SKIP 
+   lviMethod VIEW-AS FILL-IN FORMAT "9" NO-LABELS "Choose method"   SKIP 
    lvlDebug  LABEL "Debug?"          VIEW-AS TOGGLE-BOX SKIP 
    lvlShow   LABEL "Show?"           VIEW-AS TOGGLE-BOX SKIP
    lvlOutput LABEL "Output?"         VIEW-AS TOGGLE-BOX SKIP 
-   SKIP (2)
+   SKIP (1)
    "Progress:" SKIP
-   edProgress VIEW-AS EDITOR SIZE 76 BY 10 LARGE NO-LABELS
+   edProgress VIEW-AS EDITOR SIZE 76 BY 9 LARGE NO-LABELS
 WITH FRAME fr-Parameters SIDE-LABELS ROW 3 CENTERED TITLE " Parameters ".
 
 ASSIGN 
@@ -158,9 +158,8 @@ END.
 UPDATE
    lOpenURL
    lDownload
-   lPart[1]
+   lPart
    lviMethod
-   lPart[2]
    lvlDebug
    lvlShow
    lvlOutput
@@ -461,7 +460,8 @@ IF lPart[1] THEN DO:
          iBoundary = iBoundary + ttInstruction.Steps. 
       END.
       
-      edProgress:INSERT-STRING (SUBSTITUTE ("Boundaries: &1~n", iBoundary)).
+      edProgress:INSERT-STRING (SUBSTITUTE ("Part One~n")).
+      edProgress:INSERT-STRING (SUBSTITUTE ("----------------~n")).
       
       FOR EACH ttPoint:
          FIND  ttPrevPoint
@@ -472,15 +472,17 @@ IF lPart[1] THEN DO:
          WHERE ttNextPoint.IDPoint = ttPoint.IDPoint + 1 NO-ERROR.
          IF NOT AVAILABLE ttNextPoint THEN 
             FIND FIRST ttNextPoint.
-         iSum = iSum + ttPoint.iX * (ttPrevPoint.iY - ttNextPoint.iY).
-         edProgress:INSERT-STRING (SUBSTITUTE ("Point (&1,&2) Next(&5,&6) Previous (&3,&4)  Sum &7~n", 
-                                               ttPoint.iX,
-                                               ttPoint.iY,
-                                               ttPrevPoint.iX,
-                                               ttPrevPoint.iY,
-                                               ttNextPoint.iX,
-                                               ttNextPoint.iY,
-                                               iSum)).
+         iSum = iSum + ttPoint.iY * (ttPrevPoint.iX - ttNextPoint.iX).
+         IF lvlShow THEN DO:
+            edProgress:INSERT-STRING (SUBSTITUTE ("Point (&1,&2) Next(&5,&6) Previous (&3,&4)  Sum &7~n", 
+                                                  ttPoint.iy,
+                                                  ttPoint.ix,
+                                                  ttPrevPoint.iy,
+                                                  ttPrevPoint.iX,
+                                                  ttNextPoint.iY,
+                                                  ttNextPoint.iX,
+                                                  iSum)).
+         END.
       END.
       iSum = ABSOLUTE (iSum).
       iArea = iSum / 2.
@@ -505,8 +507,10 @@ IF lPart[1] THEN DO:
          RUN sy\win\wbrowsett.w
             (INPUT TEMP-TABLE ttPoint:HANDLE).
       END.
-      ENABLE edProgress WITH FRAME fr-Parameters.
-      WAIT-FOR CLOSE OF THIS-PROCEDURE.
+      IF lPart[2] EQ FALSE THEN DO:
+         ENABLE edProgress WITH FRAME fr-Parameters.
+         WAIT-FOR CLOSE OF THIS-PROCEDURE.
+      END.
    END.   
 END. /* Process Part One */
 
@@ -528,185 +532,106 @@ IF lPart[2] THEN DO:
    END.
    
    /* Calcolate Solution for Part 2 */
-   EMPTY TEMP-TABLE ttGrid.
-   ASSIGN 
-      iX = 1
-      iY = 1
-   .
-   ASSIGN 
-      iMinX = iX
-      iMaxX = iX
-      iMinY = iY
-      iMaxY = iY
-   .
-   
-   /* Start Position */
-   iNewIDGrid = iNewIDGrid + 1.
-   CREATE ttGrid.
-   ASSIGN 
-      ttGrid.IDGrid = iNewIDGrid
-      ttGrid.iX     = iX
-      ttGrid.iY     = iY
-      ttGrid.Symbol = "#"
-   .
-   /* Create "border" trench */  
-   FOR EACH ttInstruction,
-   FIRST ttDirection 
-   WHERE ttDirection.Direction EQ ttInstruction.NewDirection:
-      ACCUM "" (COUNT).
-      IF (ACCUM COUNT "") MOD 10 EQ 0 THEN DO:
-         IF lvlShow THEN DO:
-            edProgress:INSERT-STRING (SUBSTITUTE ("Instruction #&1: Move &2 steps in direction: &3.~n",
-                                                  ttInstruction.IDInstruction,
-                                                  ttInstruction.NewSteps,
-                                                  ttInstruction.NewDirection)).
-            PROCESS EVENTS.                                                  
-         END.                                                  
-      END.                                                  
-      DO iStep = 1 TO ttInstruction.NewSteps:
-         ASSIGN 
-            iX = iX + ttDirection.deltaX
-            iY = iY + ttDirection.deltaY
-         .
-         FIND  ttGrid
-         WHERE ttGrid.iX EQ iX
-         AND   ttGrid.iY EQ iY NO-ERROR.
-         IF NOT AVAILABLE ttGrid THEN DO:
-            iNewIDGrid = iNewIDGrid + 1.
-            CREATE ttGrid.
-            ASSIGN 
-               ttGrid.IDGrid = iNewIDGrid
-               ttGrid.iX     = iX
-               ttGrid.iY     = iY
-               ttGrid.Symbol = "#"
-            .
-         END.
-         ASSIGN 
-            ttGrid.Touched = ttGrid.Touched + 1
-         .
-      END.
-      IF iX GT iMaxX THEN iMaxX = iX.
-      IF iX LT iMinX THEN iMinX = iX.
-      IF iY GT iMaxY THEN iMaxY = iY.
-      IF iY LT iMinY THEN iMinY = iY.
-   END.
-
-   IF lvlOutput THEN DO:
-      RUN outputGrid
-         (INPUT iDay,
-          INPUT "2_Start",
-          INPUT iMinX,
-          INPUT iMaxX,
-          INPUT iMinY,
-          INPUT iMaxY).
+   IF lviMethod EQ 1 THEN DO:
+      MESSAGE "Don't try Part Two with method 1. " SKIP 
+      "It will take too long to run and probably won't finish..." SKIP 
+      "We'll do it using method 2."
+      VIEW-AS ALERT-BOX.
+      lviMethod = 2.
+      DISPLAY 
+      lviMethod 
+      WITH FRAME fr-Parameters.
    END.
    
-
-   /* Now fill the interior */
-   ASSIGN 
-      lUp = ?
-   .
-   
-   DO iY = iMinY TO iMaxY:
+   IF lviMethod EQ 2 THEN DO:
+      /* Alternative Method 
+      ** Shoelace formula: https://en.wikipedia.org/wiki/Shoelace_formula
+      */
+      EMPTY TEMP-TABLE ttPoint.
       ASSIGN 
-         lInside = FALSE
+         iBoundary = 0
+         iSum      = 0
       .
-      DO iX = iMinX TO iMaxX:
-         FIND  ttGrid
-         WHERE ttGrid.iX EQ iX
-         AND   ttGrid.iY EQ iY NO-ERROR.
-         IF AVAILABLE ttGrid THEN DO:
-            FOR EACH ttDirection,
-            FIRST ttNextGrid
-            WHERE ttNextGrid.iX     EQ ttGrid.iX + ttDirection.deltaX
-            AND   ttNextGrid.iY     EQ ttGrid.iY + ttDirection.deltaY
-            AND   ttNextGrid.Symbol EQ "#":
-               ttGrid.Directions = SUBSTITUTE ("&1&2&3",
-                                               ttGrid.Directions,
-                                               (IF ttGrid.Directions NE "" THEN "," ELSE ""),
-                                               ttDirection.Direction).
-            END.
-            CASE ttGrid.Directions:
-               WHEN "D,R" OR 
-               WHEN "R,D" THEN DO:
-                  lUp = TRUE.
-               END.
-               WHEN "U,L" OR 
-               WHEN "L,U" THEN DO:
-                  IF lUp EQ TRUE THEN 
-                     lInside = NOT lInside.
-               END.
-               WHEN "L,D" OR 
-               WHEN "D,L" THEN DO:
-                  IF lUp EQ FALSE THEN 
-                     lInside = NOT lInside.
-               END.
-               WHEN "U,R" OR 
-               WHEN "R,U" THEN 
-                  lUp = FALSE.
-               WHEN "U,D" OR 
-               WHEN "D,U" THEN DO:
-                  lInside = NOT lInside.
-               END.
-               WHEN "R"   OR 
-               WHEN "L,R" OR 
-               WHEN "R,L" THEN DO:
-                  /* Postpone decision */
-               END.
-               OTHERWISE DO:
-                  MESSAGE SUBSTITUTE ("Unexpected directions from (&1,&2): &3.", 
-                                      ttGrid.iX,
-                                      ttGrid.iY,
-                                      ttGrid.Directions)
-                  VIEW-AS ALERT-BOX.
-               END.
-            END CASE.
-         END.
-         ELSE DO:
-            IF lInside EQ TRUE THEN DO:
-               /* Create ttGrid for interior */
-               iNewIDGrid = iNewIDGrid + 1.
-               CREATE ttGrid.
-               ASSIGN 
-                  ttGrid.IDGrid  = iNewIDGrid
-                  ttGrid.iX      = iX
-                  ttGrid.iY      = iY
-                  ttGrid.Symbol  = "*"
-                  ttGrid.Touched = 1
-               .
-            END.
+      ASSIGN 
+         iX = 0
+         iY = 0
+      .
+      iNewIDPoint = iNewIDPoint + 1.
+      CREATE ttPoint.
+      ASSIGN 
+         ttPoint.IDPoint = iNewIDPoint
+         ttPoint.iX      = iX
+         ttPoint.iY      = iY
+      .
+      
+      FOR EACH ttInstruction,
+      FIRST ttDirection 
+      WHERE ttDirection.Direction EQ ttInstruction.NewDirection:
+         ASSIGN 
+            iX = iX + ttDirection.deltaX * ttInstruction.NewSteps
+            iY = iY + ttDirection.deltaY * ttInstruction.NewSteps
+         .
+         iNewIDPoint = iNewIDPoint + 1.
+         CREATE ttPoint.
+         ASSIGN 
+            ttPoint.IDPoint = iNewIDPoint
+            ttPoint.iX      = iX
+            ttPoint.iY      = iY
+         .
+         iBoundary = iBoundary + ttInstruction.NewSteps. 
+      END.
+      
+      edProgress:INSERT-STRING ("~n~n").
+      edProgress:INSERT-STRING (SUBSTITUTE ("Part Two~n")).
+      edProgress:INSERT-STRING (SUBSTITUTE ("----------------~n")).
+      
+      FOR EACH ttPoint:
+         FIND  ttPrevPoint
+         WHERE ttPrevPoint.IDPoint EQ ttPoint.IDPoint - 1 NO-ERROR.
+         IF NOT AVAILABLE ttPrevPoint THEN 
+            FIND LAST ttPrevPoint.
+         FIND  ttNextPoint 
+         WHERE ttNextPoint.IDPoint = ttPoint.IDPoint + 1 NO-ERROR.
+         IF NOT AVAILABLE ttNextPoint THEN 
+            FIND FIRST ttNextPoint.
+         iSum = iSum + ttPoint.iY * (ttPrevPoint.iX - ttNextPoint.iX).
+         IF lvlShow THEN DO:
+            edProgress:INSERT-STRING (SUBSTITUTE ("Point (&1,&2) Next(&5,&6) Previous (&3,&4)  Sum &7~n", 
+                                                  ttPoint.iy,
+                                                  ttPoint.ix,
+                                                  ttPrevPoint.iy,
+                                                  ttPrevPoint.iX,
+                                                  ttNextPoint.iY,
+                                                  ttNextPoint.iX,
+                                                  iSum)).
          END.
       END.
-   END.
+      iSum  = ABSOLUTE (iSum).
+      iArea = iSum / 2.
+      edProgress:INSERT-STRING (SUBSTITUTE ("Area: &1 (&2 / 2)~n", iArea, iSum)).
+      /* Use Pick's Theorem for interior points */
+      iInterior = iArea - (iBoundary / 2) + 1.
+      edProgress:INSERT-STRING (SUBSTITUTE ("Interior: &1~n", iInterior)).
+      edProgress:INSERT-STRING (SUBSTITUTE ("Boundary: &1~n", iBoundary)).
+      iArea = iInterior + iBoundary.
+      iSolution = iArea.
+      edProgress:INSERT-STRING (SUBSTITUTE ("Solution: &1~n", iSolution)).
       
-   IF lvlOutput THEN DO:
-      RUN outputGrid
-         (INPUT iDay,
-          INPUT "2_Fill",
-          INPUT iMinX,
-          INPUT iMaxX,
-          INPUT iMinY,
-          INPUT iMaxY).
+      OUTPUT TO "clipboard".
+      PUT UNFORMATTED iSolution SKIP.
+      OUTPUT CLOSE.
+      MESSAGE 
+         SUBSTITUTE ("Solution: &1.", iSolution) SKIP (1)
+         SUBSTITUTE ("Found solution in &1 msecs.", ETIME)
+      VIEW-AS ALERT-BOX TITLE " 2023 - Day 18 - Part One".
+      
+      IF lvlShow THEN DO:
+         RUN sy\win\wbrowsett.w
+            (INPUT TEMP-TABLE ttPoint:HANDLE).
+      END.
+      ENABLE edProgress WITH FRAME fr-Parameters.
+      WAIT-FOR CLOSE OF THIS-PROCEDURE.
    END.
-   
-   iSolution = 0.
-   FOR EACH ttGrid:
-      iSolution = iSolution + 1.
-   END.
-    
-   OUTPUT TO "clipboard".
-   PUT UNFORMATTED iSolution SKIP.
-   OUTPUT CLOSE.
-
-   MESSAGE 
-      SUBSTITUTE ("Solution: &1.", iSolution) SKIP (1)
-      SUBSTITUTE ("Found solution in &1 msecs.", ETIME)
-   VIEW-AS ALERT-BOX TITLE " 2023 - Day 18 - Part Two".
-   
-   IF lvlShow THEN DO:
-      RUN sy\win\wbrowsett.w
-         (INPUT TEMP-TABLE ttGrid:HANDLE).
-   END.      
 END. /* Process Part Two */
 
 CATCH oError AS Progress.Lang.Error :
